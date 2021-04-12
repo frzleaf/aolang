@@ -7,34 +7,32 @@ import (
 )
 
 func main() {
-	addr := net.UDPAddr{
+	raddr := net.UDPAddr{
 		Port: 6112,
-		IP:   net.ParseIP("127.0.0.1"),
+		//IP: net.ParseIP("0.0.0.0"),
+		IP: net.ParseIP("255.255.255.255"),
 	}
-	ln, err := net.ListenUDP("udp", &addr)
+	laddr := net.UDPAddr{
+		Port: 6112,
+		IP:   net.ParseIP("0.0.0.0"),
+		//IP:   net.ParseIP("255.255.255.255"),
+	}
+	//laddr := net.UDPAddr{
+	//	Port: 11260,
+	//	IP: net.ParseIP("0.0.0.0"),
+	//}
+	ln, err := net.DialUDP("udp4", &laddr, &raddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var buf [50]byte
-	counter := 0
+	buf := make([]byte, 16)
 	for {
-		read, client, err := ln.ReadFromUDP(buf[:])
+		read, client, err := ln.ReadFromUDP(buf)
 		if err != nil {
-			log.Fatal(err, read)
+			log.Fatal(err)
 		}
-		fmt.Println(buf[0:read])
-		fmt.Println(counter)
-		_, _, e := ln.WriteMsgUDP([]byte("tesst"), nil, client)
-		if e != nil {
-			fmt.Errorf("Can not send %v", err)
-		} else {
-			fmt.Println("send ok")
-			if counter == 10 {
-				log.Fatal("end")
-			}
-		}
-		counter++
+		fmt.Println(buf[0:read], " from ", client)
 	}
 
 }
