@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
@@ -10,14 +11,22 @@ import (
 
 func main() {
 
+	var lAddr, rAddr string
+
 	if len(os.Args) < 3 {
 		fmt.Println("Không điền đủ tham số, vui lòng nhập lại theo mẫu: ")
 		fmt.Println("warlan 10.0.0.1 10.0.0.2")
-		os.Exit(0)
-	}
 
-	lAddr := os.Args[1]
-	rAddr := os.Args[2]
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Print("Vui lòng nhập local ip: ")
+		lAddr, _ = reader.ReadString('\n')
+		fmt.Print("Vui lòng nhập host ip: ")
+		rAddr, _ = reader.ReadString('\n')
+
+	} else {
+		lAddr = os.Args[1]
+		rAddr = os.Args[2]
+	}
 
 	for {
 		watchAndForward(lAddr, rAddr)
