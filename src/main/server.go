@@ -12,7 +12,8 @@ func main() {
 
 	if len(os.Args) < 3 {
 		fmt.Println("Không điền đủ tham số, vui lòng nhập lại theo mẫu: ")
-		fmt.Println("lancraft 10.0.0.1 10.0.0.2")
+		fmt.Println("warlan 10.0.0.1 10.0.0.2")
+		os.Exit(0)
 	}
 
 	lAddr := os.Args[1]
