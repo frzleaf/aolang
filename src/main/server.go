@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -20,8 +21,10 @@ func main() {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Print("Vui lòng nhập local ip: ")
 		lAddr, _ = reader.ReadString('\n')
+		lAddr = strings.TrimSpace(lAddr)
 		fmt.Print("Vui lòng nhập host ip: ")
 		rAddr, _ = reader.ReadString('\n')
+		rAddr = strings.TrimSpace(rAddr)
 
 	} else {
 		lAddr = os.Args[1]
