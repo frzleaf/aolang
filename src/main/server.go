@@ -73,7 +73,7 @@ func watchAndForward(lAddr, rAddr string) {
 		scannerConn.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
 		read, client, err := scannerConn.ReadFromUDP(buf)
 		if err != nil {
-			continue
+			return
 		}
 
 		if err != nil {
@@ -144,7 +144,7 @@ func intermediate(tcpConn net.Conn, rTcpAddr net.TCPAddr, onExit func()) {
 				if err1.Error() != "EOF" {
 					fmt.Println("Có lỗi xảy ra:" + err1.Error())
 				}
-				break
+				return
 			} else {
 				rtcp.Write(buf1[0:r])
 			}
@@ -158,7 +158,7 @@ func intermediate(tcpConn net.Conn, rTcpAddr net.TCPAddr, onExit func()) {
 				if err1.Error() != "EOF" {
 					fmt.Println("Có lỗi xảy ra:" + err1.Error())
 				}
-				break
+				return
 			} else {
 				tcpConn.Write(buf2[0:r])
 			}
