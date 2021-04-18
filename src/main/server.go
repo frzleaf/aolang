@@ -14,7 +14,6 @@ import (
 func main() {
 
 	var lAddr, rAddr string
-	//var port int
 
 	if len(os.Args) < 3 {
 		fmt.Println("Không điền đủ tham số, vui lòng nhập lại theo mẫu: ")
@@ -27,14 +26,6 @@ func main() {
 		fmt.Print("Vui lòng nhập host ip: ")
 		rAddr, _ = reader.ReadString('\n')
 		rAddr = strings.TrimSpace(rAddr)
-		fmt.Print("Vui lòng nhập port: ")
-		//strPort, _ := reader.ReadString('\n')
-		//if tport, err := strconv.Atoi(strings.TrimSpace(strPort)); err != nil {
-		//	log.Fatal("Sai port, vui lòng nhập số từ: 6110 - 6112")
-		//} else {
-		//	port = tport
-		//}
-
 	} else {
 		lAddr = os.Args[1]
 		rAddr = os.Args[2]
