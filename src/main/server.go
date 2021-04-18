@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -13,6 +14,7 @@ import (
 func main() {
 
 	var lAddr, rAddr string
+	//var port int
 
 	if len(os.Args) < 3 {
 		fmt.Println("Không điền đủ tham số, vui lòng nhập lại theo mẫu: ")
@@ -25,6 +27,13 @@ func main() {
 		fmt.Print("Vui lòng nhập host ip: ")
 		rAddr, _ = reader.ReadString('\n')
 		rAddr = strings.TrimSpace(rAddr)
+		fmt.Print("Vui lòng nhập port: ")
+		//strPort, _ := reader.ReadString('\n')
+		//if tport, err := strconv.Atoi(strings.TrimSpace(strPort)); err != nil {
+		//	log.Fatal("Sai port, vui lòng nhập số từ: 6110 - 6112")
+		//} else {
+		//	port = tport
+		//}
 
 	} else {
 		lAddr = os.Args[1]
@@ -63,6 +72,8 @@ func watchAndForward(lAddr, rAddr string) {
 
 	joinedGame := false
 	gameListConn, err := net.DialUDP("udp4", nil, &l2Udpaddr)
+	exitAll := false
+
 	for {
 		_, err = scannerConn.Write(
 			[]byte{0xf7, 0x2f, 0x10, 0x00, 0x50, 0x58, 0x33, 0x57, 0x18, 0x00, 0x00, 0x00, scanCounter, 0x00, 0x00, 0x00},
@@ -80,7 +91,7 @@ func watchAndForward(lAddr, rAddr string) {
 			fmt.Println("Host " + client.IP.String() + "     : " + string(buf[0:read]))
 			go func() {
 				defer gameListConn.Close()
-				for !joinedGame {
+				for !joinedGame || exitAll {
 					_, err = gameListConn.Write(buf[0:read])
 					time.Sleep(time.Second)
 				}
@@ -89,13 +100,19 @@ func watchAndForward(lAddr, rAddr string) {
 		}
 	}
 
+	openPort := checkPortOpen(rAddr, []int{6110, 6111, 6112})
+	if openPort < 0 {
+		exitAll = true
+		return
+	}
+
 	lTcpAddr := net.TCPAddr{
 		IP:   net.ParseIP(lAddr),
-		Port: 6112,
+		Port: openPort,
 	}
 	rTcpAddr := net.TCPAddr{
 		IP:   net.ParseIP(rAddr),
-		Port: 6112,
+		Port: openPort,
 	}
 	ltcp, err := net.ListenTCP("tcp", &lTcpAddr)
 	if err != nil {
@@ -156,4 +173,19 @@ func intermediate(tcpConn net.Conn, rTcpAddr net.TCPAddr, onExit func()) {
 			}
 		}
 	}()
+}
+
+func checkPortOpen(host string, ports []int) int {
+	for _, port := range ports {
+		timeout := time.Millisecond * 300
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(port)), timeout)
+		if err != nil {
+			fmt.Println("Connecting error:", err)
+		}
+		if conn != nil {
+			defer conn.Close()
+			return port
+		}
+	}
+	return -1
 }
