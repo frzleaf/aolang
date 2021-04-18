@@ -91,11 +91,11 @@ func watchAndForward(lAddr, rAddr string) {
 
 	lTcpAddr := net.TCPAddr{
 		IP:   net.ParseIP(lAddr),
-		Port: 6110,
+		Port: 6112,
 	}
 	rTcpAddr := net.TCPAddr{
 		IP:   net.ParseIP(rAddr),
-		Port: 6110,
+		Port: 6112,
 	}
 	ltcp, err := net.ListenTCP("tcp", &lTcpAddr)
 	if err != nil {
