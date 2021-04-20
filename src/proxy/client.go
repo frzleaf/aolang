@@ -2,31 +2,60 @@ package proxy
 
 import (
 	"fmt"
+	"log"
 	"net"
 )
 
 type Client struct {
-	srcId      int
-	connection net.Conn
+	sConn net.Conn
+	gConn map[int] net.Conn
 }
 
-func (c *Client) sendMsg(data []byte) error {
-	_, err := c.connection.Write(data)
+func (c *Client) sendMsgToGame(srcId int, data []byte) error {
+	if conn := c.gConn[srcId]; conn != nil {
+		_, err := conn.Write(data)
+		return err
+	}
+	return nil
+}
+
+func (c *Client) sendMsgToClient(targetId int, data []byte) error {
+	_, err := c.sConn.Write(WrapMessage(targetId, data))
 	return err
 }
 
-func (c *Client) sendMsg(data []byte) error {
-	_, err := c.connection.Write(data)
-	return err
+func (c *Client) watchAndForward(onExit func()) {
+	buf1 := make([]byte, 1000)
+
+	go func() {
+		defer c.sConn.Close()
+		defer onExit()
+		for {
+			if r, err1 := c.sConn.Read(buf1); err1 != nil {
+				if err1.Error() != "EOF" {
+					fmt.Println("Có lỗi xảy ra:" + err1.Error())
+				}
+				return
+			} else {
+				targetId, data, err1 := ExtractMessageToConnectorIDAndData(buf1[0:r])
+				if err1 != nil {
+					fmt.Println(InvalidMessageError)
+				}
+				if conn := c.gConn[targetId]; conn != nil {
+					if _, err := conn.Write(data); err != nil {
+						fmt.Println(err)
+					}
+				}
+			}
+		}
+	}()
 }
 
-type Host struct {
-	conn     net.Conn
-	clients  map[int]*Client
-	hostAddr string
+func (c *Client) ()  {
+	
 }
 
-func (h *Host) run(sAddr string) error {
+func (c *Client) run(sAddr string) error {
 	connection, err := net.Dial("tcp", sAddr)
 	if err != nil {
 		return err
@@ -38,29 +67,5 @@ func (h *Host) run(sAddr string) error {
 	} else {
 		fmt.Println(string(buf[0:read]))
 	}
-	h.conn = connection
-}
-
-func (h *Host) host() error {
-	buf := make([]byte, 512)
-	for {
-		read, err := h.conn.Read(buf)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		srcId, data, err := ExtractMessageToConnectorIDAndData(buf[0:read])
-		if err != nil {
-			continue
-		}
-		dial, err := net.Dial("tcp", h.hostAddr)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		client := Client{
-			srcId, dial,
-		}
-		h.clients[srcId] = &client
-	}
+	c.sConn = connection
 }
