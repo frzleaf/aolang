@@ -74,10 +74,7 @@ func watchAndForward(lAddr, rAddr string) {
 		read, client, err := scannerConn.ReadFromUDP(buf)
 		if err != nil {
 			return
-		}
 
-		if err != nil {
-			log.Println(err)
 		} else {
 			fmt.Println("Host " + client.IP.String() + "     : " + string(buf[0:read]))
 			go func() {
