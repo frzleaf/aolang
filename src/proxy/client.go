@@ -67,7 +67,6 @@ func (c *Client) watchToGame(onExit func()) {
 						conn = c.pConn
 					}
 					if conn != nil {
-						fmt.Println("On data ", string(packet.data))
 						if _, err1 = conn.Write(packet.data); err1 != nil {
 							fmt.Println("Error on write: ", err1)
 						}
@@ -139,7 +138,6 @@ func (c *Client) PrepareNewGameConnection(srcId int) (gConn net.Conn, err error)
 
 	go func() {
 		buf := make([]byte, 1000)
-		isFirstTime := true
 		for {
 			read, err := gConn.Read(buf)
 			if err != nil {
@@ -151,20 +149,8 @@ func (c *Client) PrepareNewGameConnection(srcId int) (gConn net.Conn, err error)
 				delete(c.gConn, srcId)
 				break
 			} else {
-				if isFirstTime {
-					if read > 120 {
-						if _, err = c.sConn.Write(NewInformPacket(c.id, srcId, buf[120:read]).ToBytes()); err != nil {
-							fmt.Println("Error 121: ", err)
-						}
-						if _, err = c.sConn.Write(NewInformPacket(c.id, srcId, buf[0:120]).ToBytes()); err != nil {
-							fmt.Println("Error 120: ", err)
-						}
-					}
-					isFirstTime = false
-				} else {
-					if _, err = c.sConn.Write(NewInformPacket(c.id, srcId, buf[0:read]).ToBytes()); err != nil {
-						fmt.Println("Error: ", err)
-					}
+				if _, err = c.sConn.Write(NewInformPacket(c.id, srcId, buf[:read]).ToBytes()); err != nil {
+					fmt.Println("Host response error: ", err)
 				}
 			}
 		}
@@ -203,12 +189,10 @@ func (c *Client) SendListGameAndOpenVirtualHost(listGameData []byte) error {
 							if err.Error() == "EOF" {
 								continue
 							}
-							fmt.Println("Error on game send ", err)
-							//err.Error()
+							fmt.Println("Error on game read ", err)
 							break
 
 						} else {
-							fmt.Println("Game to local: ", string(buf[0:read]))
 							_, err := c.sConn.Write(NewInformPacket(c.id, dstClient, buf[0:read]).ToBytes())
 							if err != nil {
 								fmt.Println("Error: ", err)
@@ -273,22 +257,22 @@ func (c *Client) closeGConn(targetId int) {
 	}
 }
 
-func (c *Client) watchToServer(targetId int) {
-	defer c.closeGConn(targetId)
-	if conn := c.gConn[targetId]; conn != nil {
-		buf := make([]byte, 1000)
-		for {
-			if r, err1 := conn.Read(buf); err1 != nil {
-				if err1.Error() != "EOF" {
-					fmt.Println("Có lỗi xảy ra:" + err1.Error())
-				}
-				return
-			} else {
-				c.SendToOther(targetId, buf[0:r])
-			}
-		}
-	}
-}
+//func (c *Client) watchToServer(targetId int) {
+//	defer c.closeGConn(targetId)
+//	if conn := c.gConn[targetId]; conn != nil {
+//		buf := make([]byte, 1000)
+//		for {
+//			if r, err1 := conn.Read(buf); err1 != nil {
+//				if err1.Error() != "EOF" {
+//					fmt.Println("Có lỗi xảy ra:" + err1.Error())
+//				}
+//				return
+//			} else {
+//				c.SendToOther(targetId, buf[0:r])
+//			}
+//		}
+//	}
+//}
 
 //func (c *Client) listenToGame()  {
 //	for {
@@ -325,7 +309,7 @@ func (c *Client) Connect(sAddr string) error {
 
 	go c.readCommand()
 
-	go c.watchToServer(0)
+	//go c.watchToServer(0)
 
 	//go c.listenToGame()
 
