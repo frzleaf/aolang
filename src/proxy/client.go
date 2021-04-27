@@ -34,7 +34,6 @@ func NewClient() *Client {
 func (c *Client) watchToGame(onExit func()) {
 	defer onExit()
 	buf := make([]byte, 1000)
-	var trickyBytes []byte
 	for {
 		if r, err1 := c.sConn.Read(buf); err1 != nil {
 			if err1.Error() != "EOF" && !c.isClosed {
@@ -42,62 +41,58 @@ func (c *Client) watchToGame(onExit func()) {
 			}
 			return
 		} else {
-			packet := PacketFromBytes(buf[0:r])
-			fmt.Printf("\nReceive msg from #%v len %v\n", packet.SrcAddr(), len(packet.Data()))
-			switch packet.pkgType {
-			case PackageTypeFindHostResponse:
-				err1 := c.SendListGameAndOpenVirtualHost(packet.data)
-				if err1 != nil {
-					fmt.Println(err1)
-				}
-			case PackageTypeInform:
-				var conn net.Conn
-				// Host behavior
-				if c.pServer == nil {
-					conn = c.gConn[packet.SrcAddr()]
-					if conn == nil {
-						conn, err1 = c.PrepareNewGameConnection(packet.src)
+			packets := PacketFromBytes(buf[0:r])
+			for _, packet := range packets {
+				fmt.Printf("\nReceive msg from #%v len %v\n", packet.SrcAddr(), len(packet.Data()))
+				switch packet.pkgType {
+				case PackageTypeFindHostResponse:
+					err1 := c.SendListGameAndOpenVirtualHost(packet.data)
+					if err1 != nil {
+						fmt.Println(err1)
+					}
+				case PackageTypeInform:
+					var conn net.Conn
+					// Host behavior
+					if c.pServer == nil {
+						conn = c.gConn[packet.SrcAddr()]
+						if conn == nil {
+							conn, err1 = c.PrepareNewGameConnection(packet.src)
+							if err1 != nil {
+								fmt.Println("Lỗi khi connect host: ", err1)
+								break
+							}
+							fmt.Println("New client join host: ", packet.SrcAddr())
+						}
+					} else {
+						conn = c.pConn
+					}
+					if conn != nil {
+						fmt.Println("On data ", string(packet.data))
+						if _, err1 = conn.Write(packet.data); err1 != nil {
+							fmt.Println("Error on write: ", err1)
+						}
+					} else {
+						fmt.Println("WARN: receive data but pConn is null: ", string(packet.data))
+					}
+				case PackageTypeConnectHost:
+					gConn := c.gConn[packet.SrcAddr()]
+					if gConn == nil {
+						gConn, err1 = c.PrepareNewGameConnection(packet.src)
 						if err1 != nil {
 							fmt.Println("Lỗi khi connect host: ", err1)
 							break
 						}
 						fmt.Println("New client join host: ", packet.SrcAddr())
 					}
-				} else {
-					conn = c.pConn
-				}
-				if conn != nil {
-					fmt.Println("On data ", string(packet.data))
-					if trickyBytes == nil && len(packet.data) > 200 {
-						trickyBytes = packet.data
+					if _, err := gConn.Write(packet.data); err != nil {
+						fmt.Println(err)
+					}
+				case PackageTypeFindHost:
+					if gameData, err := c.GetGameList(); err == nil {
+						c.sConn.Write(NewPacket(PackageTypeFindHostResponse, c.id, packet.SrcAddr(), gameData).ToBytes())
 					} else {
-						if len(trickyBytes) > 200 {
-							conn.Write(trickyBytes)
-							trickyBytes = make([]byte, 1)
-						}
-						conn.Write(packet.data)
+						fmt.Println("No game found: ", err)
 					}
-				} else {
-					fmt.Println("WARN: receive data but pConn is null: ", string(packet.data))
-				}
-			case PackageTypeConnectHost:
-				gConn := c.gConn[packet.SrcAddr()]
-				if gConn == nil {
-					gConn, err1 = c.PrepareNewGameConnection(packet.src)
-					if err1 != nil {
-						fmt.Println("Lỗi khi connect host: ", err1)
-						break
-					}
-					fmt.Println("New client join host: ", packet.SrcAddr())
-				}
-				if _, err := gConn.Write(packet.data); err != nil {
-					fmt.Println(err)
-				}
-			case PackageTypeFindHost:
-				if gameData, err := c.GetGameList(); err == nil {
-					c.sConn.Write(NewPacket(PackageTypeFindHostResponse, c.id, packet.SrcAddr(), gameData).ToBytes())
-				} else {
-					fmt.Println("No game found: ", err)
 				}
 			}
 		}
@@ -144,6 +139,7 @@ func (c *Client) PrepareNewGameConnection(srcId int) (gConn net.Conn, err error)
 
 	go func() {
 		buf := make([]byte, 1000)
+		isFirstTime := true
 		for {
 			read, err := gConn.Read(buf)
 			if err != nil {
@@ -155,9 +151,20 @@ func (c *Client) PrepareNewGameConnection(srcId int) (gConn net.Conn, err error)
 				delete(c.gConn, srcId)
 				break
 			} else {
-				_, err := c.sConn.Write(NewInformPacket(c.id, srcId, buf[0:read]).ToBytes())
-				if err != nil {
-					fmt.Println("Error: ", err)
+				if isFirstTime {
+					if read > 120 {
+						if _, err = c.sConn.Write(NewInformPacket(c.id, srcId, buf[120:read]).ToBytes()); err != nil {
+							fmt.Println("Error 121: ", err)
+						}
+						if _, err = c.sConn.Write(NewInformPacket(c.id, srcId, buf[0:120]).ToBytes()); err != nil {
+							fmt.Println("Error 120: ", err)
+						}
+					}
+					isFirstTime = false
+				} else {
+					if _, err = c.sConn.Write(NewInformPacket(c.id, srcId, buf[0:read]).ToBytes()); err != nil {
+						fmt.Println("Error: ", err)
+					}
 				}
 			}
 		}
@@ -182,35 +189,35 @@ func (c *Client) SendListGameAndOpenVirtualHost(listGameData []byte) error {
 	c.pServer, err = net.Listen("tcp", os.Args[2])
 	//c.pServer, err = net.Listen("tcp", "10.8.0.2:6110")
 	go func() {
-		//for {
-		if c.pConn, err = c.pServer.Accept(); err == nil {
-			fmt.Println("New connection: ", c.pConn.RemoteAddr())
-			//c.sConn.Write(NewInformPacket(c.id, dstClient, nil).ToBytes())
+		for {
+			if c.pConn, err = c.pServer.Accept(); err == nil {
+				fmt.Println("New connection: ", c.pConn.RemoteAddr())
+				//c.sConn.Write(NewInformPacket(c.id, dstClient, nil).ToBytes())
 
-			// new connection
-			go func() {
-				buf := make([]byte, 1000)
-				for {
-					read, err := c.pConn.Read(buf)
-					if err != nil {
-						if err.Error() == "EOF" {
-							continue
-						}
-						fmt.Println("Error on game send ", err)
-						//err.Error()
-						break
-
-					} else {
-						fmt.Println("Game to local: ", string(buf[0:read]))
-						_, err := c.sConn.Write(NewInformPacket(c.id, dstClient, buf[0:read]).ToBytes())
+				// new connection
+				go func() {
+					buf := make([]byte, 1000)
+					for {
+						read, err := c.pConn.Read(buf)
 						if err != nil {
-							fmt.Println("Error: ", err)
+							if err.Error() == "EOF" {
+								continue
+							}
+							fmt.Println("Error on game send ", err)
+							//err.Error()
+							break
+
+						} else {
+							fmt.Println("Game to local: ", string(buf[0:read]))
+							_, err := c.sConn.Write(NewInformPacket(c.id, dstClient, buf[0:read]).ToBytes())
+							if err != nil {
+								fmt.Println("Error: ", err)
+							}
 						}
 					}
-				}
-			}()
+				}()
+			}
 		}
-		//}
 	}()
 	return err
 }
@@ -304,7 +311,7 @@ func (c *Client) Connect(sAddr string) error {
 		return err
 	} else {
 		packet := PacketFromBytes(buf[0:read])
-		c.id = packet.dst
+		c.id = packet[0].DstAddr()
 		fmt.Println("Connection ID: ", c.id)
 	}
 	c.sConn = connection

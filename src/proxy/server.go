@@ -96,11 +96,12 @@ func (c *Connector) listen() {
 			fmt.Println("Close connection: " + strconv.Itoa(c.id))
 			return
 		}
-		packet := PacketFromBytes(buf[0:read])
-		fmt.Printf("\nMsg from %v: %v", packet.src, string(packet.data))
-		err = c.sendToConnector(packet.pkgType, packet.dst, packet.data)
-		if err != nil {
-			fmt.Println("error while sendInform", err)
+		for _, packet := range PacketFromBytes(buf[0:read]) {
+			fmt.Printf("\nMsg from %v: %v", packet.src, string(packet.data))
+			err = c.sendToConnector(packet.pkgType, packet.dst, packet.data)
+			if err != nil {
+				fmt.Println("error while sendInform", err)
+			}
 		}
 	}
 }
