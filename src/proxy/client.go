@@ -13,22 +13,15 @@ import (
 )
 
 type Client struct {
-	sConn    net.Conn         // server connection
-	gConn    map[int]net.Conn // game connections
-	pConn    net.Conn         // player connection
-	pServer  net.Listener     // virtual host port
-	isClosed bool
-	id       int
-	sync.Mutex
+	host  *Host
+	guest *Guest
+	sConn net.Conn
 }
 
 var dstClient int
 
 func NewClient() *Client {
-	return &Client{
-		gConn: make(map[int]net.Conn),
-		id:    -1,
-	}
+	return &Client{}
 }
 
 func (c *Client) watchToGame(onExit func()) {
@@ -98,115 +91,8 @@ func (c *Client) watchToGame(onExit func()) {
 	}
 }
 
-func (c *Client) GetGameList() (data []byte, err error) {
-	raddr := net.UDPAddr{
-		Port: 6112,
-		IP:   net.ParseIP("127.0.0.1"),
-	}
-
-	scannerConn, err := net.DialUDP("udp4", nil, &raddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer scannerConn.Close()
-	buf := make([]byte, 1000)
-	var scanCounter byte = 0
-
-	for {
-		_, err = scannerConn.Write(
-			[]byte{0xf7, 0x2f, 0x10, 0x00, 0x50, 0x58, 0x33, 0x57, 0x18, 0x00, 0x00, 0x00, scanCounter, 0x00, 0x00, 0x00},
-		)
-		scanCounter = scanCounter + 1
-		scannerConn.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
-		read, _, err1 := scannerConn.ReadFromUDP(buf)
-		if err1 != nil {
-			return nil, err1
-
-		} else {
-			return buf[0:read], nil
-		}
-	}
-}
-
-func (c *Client) PrepareNewGameConnection(srcId int) (gConn net.Conn, err error) {
-	gConn, err = net.Dial("tcp", os.Args[2])
-	if err != nil {
-		return
-	}
-	c.gConn[srcId] = gConn
-
-	go func() {
-		buf := make([]byte, 1000)
-		for {
-			read, err := gConn.Read(buf)
-			if err != nil {
-				if err.Error() == "EOF" {
-					continue
-				}
-				fmt.Println("Error on game send ", err)
-				gConn.Close()
-				delete(c.gConn, srcId)
-				break
-			} else {
-				if _, err = c.sConn.Write(NewInformPacket(c.id, srcId, buf[:read]).ToBytes()); err != nil {
-					fmt.Println("Host response error: ", err)
-				}
-			}
-		}
-	}()
-	return gConn, nil
-}
-
-func (c *Client) SendListGameAndOpenVirtualHost(listGameData []byte) error {
-	rUdpaddr := net.UDPAddr{
-		Port: 6112,
-		IP:   net.ParseIP(strings.Split(os.Args[2], ":")[0]),
-	}
-	gameListConn, err := net.DialUDP("udp4", nil, &rUdpaddr)
-	if err != nil {
-		return err
-	}
-	gameListConn.Write(listGameData)
-	if c.pServer != nil {
-		return nil
-	}
-	//net.Listen("tcp", ":" + os.Args[2])
-	c.pServer, err = net.Listen("tcp", os.Args[2])
-	//c.pServer, err = net.Listen("tcp", "10.8.0.2:6110")
-	go func() {
-		for {
-			if c.pConn, err = c.pServer.Accept(); err == nil {
-				fmt.Println("New connection: ", c.pConn.RemoteAddr())
-				//c.sConn.Write(NewInformPacket(c.id, dstClient, nil).ToBytes())
-
-				// new connection
-				go func() {
-					buf := make([]byte, 1000)
-					for {
-						read, err := c.pConn.Read(buf)
-						if err != nil {
-							if err.Error() == "EOF" {
-								continue
-							}
-							fmt.Println("Error on game read ", err)
-							break
-
-						} else {
-							_, err := c.sConn.Write(NewInformPacket(c.id, dstClient, buf[0:read]).ToBytes())
-							if err != nil {
-								fmt.Println("Error: ", err)
-							}
-						}
-					}
-				}()
-			}
-		}
-	}()
-	return err
-}
-
 func (c *Client) Close() {
+	defer c.sConn.Close()
 	defer c.sConn.Close()
 	defer func() {
 		for _, conn := range c.gConn {
@@ -257,29 +143,6 @@ func (c *Client) closeGConn(targetId int) {
 	}
 }
 
-//func (c *Client) watchToServer(targetId int) {
-//	defer c.closeGConn(targetId)
-//	if conn := c.gConn[targetId]; conn != nil {
-//		buf := make([]byte, 1000)
-//		for {
-//			if r, err1 := conn.Read(buf); err1 != nil {
-//				if err1.Error() != "EOF" {
-//					fmt.Println("Có lỗi xảy ra:" + err1.Error())
-//				}
-//				return
-//			} else {
-//				c.SendToOther(targetId, buf[0:r])
-//			}
-//		}
-//	}
-//}
-
-//func (c *Client) listenToGame()  {
-//	for {
-//		gameConn, err := net.Listen("tcp", "localhost:1993")
-//	}
-//}
-
 func (c *Client) SendToOther(targetId int, data []byte) {
 	c.sConn.Write(NewInformPacket(c.id, targetId, data).ToBytes())
 }
@@ -308,10 +171,6 @@ func (c *Client) Connect(sAddr string) error {
 	})
 
 	go c.readCommand()
-
-	//go c.watchToServer(0)
-
-	//go c.listenToGame()
 
 	c.Lock()
 	return nil
