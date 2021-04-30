@@ -3,13 +3,10 @@ package proxy
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 )
 
 type Client struct {
@@ -29,19 +26,19 @@ func (c *Client) watchToGame(onExit func()) {
 	buf := make([]byte, 1000)
 	for {
 		if r, err1 := c.sConn.Read(buf); err1 != nil {
-			if err1.Error() != "EOF" && !c.isClosed {
-				fmt.Println("Có lỗi xảy ra:" + err1.Error())
+			if err1.Error() != "EOF" {
+				LOG.Error("Có lỗi xảy ra:", err1)
 			}
 			return
 		} else {
 			packets := PacketFromBytes(buf[0:r])
 			for _, packet := range packets {
-				fmt.Printf("\nReceive msg from #%v len %v\n", packet.SrcAddr(), len(packet.Data()))
+				LOG.Infof("\nReceive msg from #%v len %v\n", packet.SrcAddr(), len(packet.Data()))
 				switch packet.pkgType {
 				case PackageTypeFindHostResponse:
 					err1 := c.SendListGameAndOpenVirtualHost(packet.data)
 					if err1 != nil {
-						fmt.Println(err1)
+						LOG.Info(err1)
 					}
 				case PackageTypeInform:
 					var conn net.Conn
@@ -51,39 +48,39 @@ func (c *Client) watchToGame(onExit func()) {
 						if conn == nil {
 							conn, err1 = c.PrepareNewGameConnection(packet.src)
 							if err1 != nil {
-								fmt.Println("Lỗi khi connect host: ", err1)
+								LOG.Info("Lỗi khi connect host: ", err1)
 								break
 							}
-							fmt.Println("New client join host: ", packet.SrcAddr())
+							LOG.Info("New client join host: ", packet.SrcAddr())
 						}
 					} else {
 						conn = c.pConn
 					}
 					if conn != nil {
 						if _, err1 = conn.Write(packet.data); err1 != nil {
-							fmt.Println("Error on write: ", err1)
+							LOG.Info("Error on write: ", err1)
 						}
 					} else {
-						fmt.Println("WARN: receive data but pConn is null: ", string(packet.data))
+						LOG.Info("WARN: receive data but pConn is null: ", string(packet.data))
 					}
 				case PackageTypeConnectHost:
 					gConn := c.gConn[packet.SrcAddr()]
 					if gConn == nil {
 						gConn, err1 = c.PrepareNewGameConnection(packet.src)
 						if err1 != nil {
-							fmt.Println("Lỗi khi connect host: ", err1)
+							LOG.Info("Lỗi khi connect host: ", err1)
 							break
 						}
-						fmt.Println("New client join host: ", packet.SrcAddr())
+						LOG.Info("New client join host: ", packet.SrcAddr())
 					}
 					if _, err := gConn.Write(packet.data); err != nil {
-						fmt.Println(err)
+						LOG.Info(err)
 					}
 				case PackageTypeFindHost:
 					if gameData, err := c.GetGameList(); err == nil {
 						c.sConn.Write(NewPacket(PackageTypeFindHostResponse, c.id, packet.SrcAddr(), gameData).ToBytes())
 					} else {
-						fmt.Println("No game found: ", err)
+						LOG.Info("No game found: ", err)
 					}
 				}
 			}
@@ -105,26 +102,26 @@ func (c *Client) Close() {
 func (c *Client) readCommand() {
 	for {
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Print("Gửi lệnh lên server: ")
+		LOG.Info("Gửi lệnh lên server: ")
 		line, _, err := reader.ReadLine()
 		if err != nil {
-			fmt.Println("Lỗi: ", err)
+			LOG.Info("Command error: ", err)
 			continue
 		}
 		lineStr := string(line)
 		if strings.HasPrefix(lineStr, "to ") {
 			split := strings.Split(lineStr, " ")
 			if len(split) == 1 {
-				fmt.Println("Missing 2nd argument")
+				LOG.Info("Missing 2nd argument")
 				continue
 			} else {
 				input2nd, err := strconv.Atoi(split[1])
 				if err != nil {
-					fmt.Println("Invalid args: ", err)
+					LOG.Info("Invalid args: ", err)
 					continue
 				}
 				dstClient = input2nd
-				fmt.Println("Selected: ", input2nd)
+				LOG.Info("Selected: ", input2nd)
 			}
 		} else if strings.HasPrefix(lineStr, "find") {
 			c.sConn.Write(NewPacket(PackageTypeFindHost, c.id, dstClient, nil).ToBytes())
@@ -152,21 +149,21 @@ func (c *Client) Connect(sAddr string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Connected to: " + sAddr)
+	LOG.Info("Connected to: " + sAddr)
 	buf := make([]byte, 1000)
 	if read, err := connection.Read(buf); err != nil {
 		return err
 	} else {
 		packet := PacketFromBytes(buf[0:read])
 		c.id = packet[0].DstAddr()
-		fmt.Println("Connection ID: ", c.id)
+		LOG.Info("Connection ID: ", c.id)
 	}
 	c.sConn = connection
 
 	c.Lock()
 
 	go c.watchToGame(func() {
-		fmt.Println("End game")
+		LOG.Info("End game")
 		c.Unlock()
 	})
 

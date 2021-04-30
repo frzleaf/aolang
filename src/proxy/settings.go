@@ -8,4 +8,17 @@ var MESSAGE_PREFIX_SIGN = []byte{27, 07, 19, 93}
 const ConnectorIDLength = 2
 const ServerConnectorID = 0
 
-const GAME_INFO = make(map["string"])
+type GameConfig struct {
+	udpPort  int
+	tcpPorts []int
+	localIp  string
+}
+
+type ConnectionConfig struct {
+	serverAddress string
+}
+
+type ClientConfig struct {
+	gameConfig       *GameConfig
+	connectionConfig *ConnectionConfig
+}
