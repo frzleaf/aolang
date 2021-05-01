@@ -9,25 +9,20 @@ import (
 )
 
 type Host struct {
-	gConn      map[int]net.Conn // game connections
-	sConn      net.Conn         // server connection
-	id         int
-	config     *ClientConfig
-	monitor    *Monitor
-	gameConfig *GameConfig
+	gConn map[int]net.Conn // game connections
+	Agent
 }
 
 func NewHost() *Host {
 	return &Host{
 		gConn: make(map[int]net.Conn),
-		id:    -1,
 	}
 }
 
 func (h *Host) GetGameList() (data []byte, err error) {
 	raddr := net.UDPAddr{
-		Port: 6112,
-		IP:   net.ParseIP("localhost"),
+		Port: h.gameConfig.udpPort,
+		IP:   net.ParseIP(h.gameConfig.localIp),
 	}
 
 	scannerConn, err := net.DialUDP("udp4", nil, &raddr)
@@ -89,40 +84,48 @@ func (h *Host) gameToServer(srcId int) {
 func (h *Host) serverToGame(data []byte) (err error) {
 	packets := PacketFromBytes(data)
 	for _, packet := range packets {
-		LOG.Infof("\nReceive msg from #%v len %v\n", packet.SrcAddr(), len(packet.Data()))
-		switch packet.pkgType {
-		case PackageTypeInform:
-			conn := h.gConn[packet.SrcAddr()]
-			if conn == nil {
-				conn, err = h.PrepareNewGameConnection(packet.src)
-				if err != nil {
-					return err
-				}
-				LOG.Info("New client join host: ", packet.SrcAddr())
-			}
-			if _, err = conn.Write(packet.data); err != nil {
-				return err
-			}
-		case PackageTypeConnectHost:
-			gConn := h.gConn[packet.SrcAddr()]
-			if gConn == nil {
-				gConn, err = h.PrepareNewGameConnection(packet.src)
-				if err != nil {
-					return err
-				}
-			}
-			if _, err := gConn.Write(packet.data); err == nil {
-				LOG.Info("New client join host: ", packet.SrcAddr())
-			}
-		case PackageTypeFindHost:
-			if gameData, err := h.GetGameList(); err == nil {
-				h.sConn.Write(NewPacket(PackageTypeFindHostResponse, h.id, packet.SrcAddr(), gameData).ToBytes())
-			} else {
-				LOG.Info("No game found: ", err)
-			}
+		if err = h.gameReceiveMessage(packet); err != nil {
+			return err
 		}
 	}
 	return
+}
+
+// TODO consider using event emitter
+func (h *Host) gameReceiveMessage(packet *Packet) (err error) {
+	LOG.Infof("\nReceive msg from #%v len %v\n", packet.SrcAddr(), len(packet.Data()))
+	switch packet.pkgType {
+	case PackageTypeInform:
+		conn := h.gConn[packet.SrcAddr()]
+		if conn == nil {
+			conn, err = h.PrepareNewGameConnection(packet.src)
+			if err != nil {
+				return err
+			}
+			LOG.Info("New client join host: ", packet.SrcAddr())
+		}
+		if _, err := conn.Write(packet.data); err != nil {
+			return err
+		}
+	case PackageTypeConnectHost:
+		gConn := h.gConn[packet.SrcAddr()]
+		if gConn == nil {
+			gConn, err = h.PrepareNewGameConnection(packet.src)
+			if err != nil {
+				return err
+			}
+		}
+		if _, err := gConn.Write(packet.data); err == nil {
+			LOG.Info("New client join host: ", packet.SrcAddr())
+		}
+	case PackageTypeFindHost:
+		if gameData, err := h.GetGameList(); err == nil {
+			h.sConn.Write(NewPacket(PackageTypeFindHostResponse, h.id, packet.SrcAddr(), gameData).ToBytes())
+		} else {
+			LOG.Info("No game found: ", err)
+		}
+	}
+	return nil
 }
 
 func (h *Host) getGameBind() string {

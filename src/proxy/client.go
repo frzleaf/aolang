@@ -31,72 +31,14 @@ func (c *Client) watchToGame(onExit func()) {
 			}
 			return
 		} else {
-			packets := PacketFromBytes(buf[0:r])
-			for _, packet := range packets {
-				LOG.Infof("\nReceive msg from #%v len %v\n", packet.SrcAddr(), len(packet.Data()))
-				switch packet.pkgType {
-				case PackageTypeFindHostResponse:
-					err1 := c.SendListGameAndOpenVirtualHost(packet.data)
-					if err1 != nil {
-						LOG.Info(err1)
-					}
-				case PackageTypeInform:
-					var conn net.Conn
-					// Host behavior
-					if c.pServer == nil {
-						conn = c.gConn[packet.SrcAddr()]
-						if conn == nil {
-							conn, err1 = c.PrepareNewGameConnection(packet.src)
-							if err1 != nil {
-								LOG.Info("Lỗi khi connect host: ", err1)
-								break
-							}
-							LOG.Info("New client join host: ", packet.SrcAddr())
-						}
-					} else {
-						conn = c.pConn
-					}
-					if conn != nil {
-						if _, err1 = conn.Write(packet.data); err1 != nil {
-							LOG.Info("Error on write: ", err1)
-						}
-					} else {
-						LOG.Info("WARN: receive data but pConn is null: ", string(packet.data))
-					}
-				case PackageTypeConnectHost:
-					gConn := c.gConn[packet.SrcAddr()]
-					if gConn == nil {
-						gConn, err1 = c.PrepareNewGameConnection(packet.src)
-						if err1 != nil {
-							LOG.Info("Lỗi khi connect host: ", err1)
-							break
-						}
-						LOG.Info("New client join host: ", packet.SrcAddr())
-					}
-					if _, err := gConn.Write(packet.data); err != nil {
-						LOG.Info(err)
-					}
-				case PackageTypeFindHost:
-					if gameData, err := c.GetGameList(); err == nil {
-						c.sConn.Write(NewPacket(PackageTypeFindHostResponse, c.id, packet.SrcAddr(), gameData).ToBytes())
-					} else {
-						LOG.Info("No game found: ", err)
-					}
-				}
+			if c.host.IsOn() {
+				c.host.serverToGame(buf[0:r])
+			}
+			if c.guest.IsOn() {
+				c.guest.serverToGame(buf[0:r])
 			}
 		}
 	}
-}
-
-func (c *Client) Close() {
-	defer c.sConn.Close()
-	defer c.sConn.Close()
-	defer func() {
-		for _, conn := range c.gConn {
-			conn.Close()
-		}
-	}()
-	c.isClosed = true
 }
 
 func (c *Client) readCommand() {

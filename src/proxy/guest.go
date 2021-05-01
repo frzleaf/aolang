@@ -4,17 +4,13 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 )
 
 type Guest struct {
-	sConn    net.Conn     // server connection
 	pConn    net.Conn     // player connection
 	pServer  net.Listener // virtual host port
 	isClosed bool
-	id       int
-	monitor  *Monitor
-	sync.Mutex
+	Agent
 }
 
 func (c *Guest) SendListGameAndProxyHost(listGameData []byte) error {

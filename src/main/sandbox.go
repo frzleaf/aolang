@@ -8,7 +8,16 @@ import (
 )
 
 func main() {
-	testPorts(6110, 6112)
+	ip, _ := findLocalIp("ist02.com:9999")
+	fmt.Println(ip)
+}
+
+func findLocalIp(targetAddr string) (string, error) {
+	if dial, err := net.Dial("tcp", targetAddr); err != nil {
+		return "", err
+	} else {
+		return dial.LocalAddr().String(), nil
+	}
 }
 
 func testPorts(from, to int) {
