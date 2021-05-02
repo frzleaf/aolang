@@ -7,8 +7,8 @@ import (
 const (
 	PackageTypeSelect = iota
 	PackageTypeInform
-	PackageTypeFindHost
-	PackageTypeFindHostResponse
+	PackageTypeBroadCast
+	PackageTypeBroadCastResponse
 	PackageTypeConnectHost
 )
 

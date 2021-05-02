@@ -23,8 +23,9 @@ type Logger struct {
 
 func NewLogger(out io.Writer) *Logger {
 	return &Logger{
-		out:     out,
-		loggers: make(map[int]*log.Logger),
+		out:      out,
+		loggers:  make(map[int]*log.Logger),
+		logLevel: InfoLevel,
 	}
 }
 
@@ -46,7 +47,7 @@ func (l *Logger) initLogger(logLevel int) *log.Logger {
 	case TraceLevel:
 		logPrefix = "TRACE: "
 	}
-	return log.New(l.out, logPrefix, log.Ldate|log.Ltime|log.Lshortfile)
+	return log.New(l.out, logPrefix, log.Ldate|log.Ltime|log.Lmsgprefix)
 }
 
 func (l *Logger) log(logLevel int, format string, args ...interface{}) {
@@ -70,7 +71,7 @@ func (l *Logger) Panic(args ...interface{}) { l.log(PanicLevel, "", args) }
 func (l *Logger) Fatal(args ...interface{}) { l.log(FatalLevel, "", args) }
 func (l *Logger) Error(args ...interface{}) { l.log(ErrorLevel, "", args) }
 func (l *Logger) Warn(args ...interface{})  { l.log(WarnLevel, "", args) }
-func (l *Logger) Info(args ...interface{})  { l.log(InfoLevel, "", args) }
+func (l *Logger) Info(args ...interface{})  { l.log(InfoLevel, "", args...) }
 func (l *Logger) Debug(args ...interface{}) { l.log(DebugLevel, "", args) }
 func (l *Logger) Trace(args ...interface{}) { l.log(TraceLevel, "", args) }
 
@@ -78,6 +79,6 @@ func (l *Logger) Panicf(format string, args ...interface{}) { l.log(PanicLevel, 
 func (l *Logger) Fatalf(format string, args ...interface{}) { l.log(FatalLevel, format, args) }
 func (l *Logger) Errorf(format string, args ...interface{}) { l.log(ErrorLevel, format, args) }
 func (l *Logger) Warnf(format string, args ...interface{})  { l.log(WarnLevel, format, args) }
-func (l *Logger) Infof(format string, args ...interface{})  { l.log(InfoLevel, format, args) }
+func (l *Logger) Infof(format string, args ...interface{})  { l.log(InfoLevel, format, args...) }
 func (l *Logger) Debugf(format string, args ...interface{}) { l.log(DebugLevel, format, args) }
 func (l *Logger) Tracef(format string, args ...interface{}) { l.log(TraceLevel, format, args) }

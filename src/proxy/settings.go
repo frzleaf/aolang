@@ -9,9 +9,10 @@ const ConnectorIDLength = 2
 const ServerConnectorID = 0
 
 type GameConfig struct {
-	udpPort  int
-	tcpPorts []int
-	localIp  string
+	udpPort          int
+	tcpPorts         []int
+	localIp          string
+	internalRemoteIp string
 }
 
 type ConnectionConfig struct {
@@ -22,3 +23,7 @@ type ClientConfig struct {
 	gameConfig       *GameConfig
 	connectionConfig *ConnectionConfig
 }
+
+const CommandAssignID = "/assign"
+const CommandFind = "/find"
+const CommandSelectTarget = "/to"

@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -9,14 +8,14 @@ import (
 )
 
 type Server struct {
-	clients       map[int]*Connector
+	clients       map[int]net.Conn
 	clientCounter int
 }
 
 func NewServer() *Server {
 	return &Server{
-		clientCounter: 0,
-		clients:       make(map[int]*Connector),
+		clientCounter: 1,
+		clients:       make(map[int]net.Conn),
 	}
 }
 
@@ -31,76 +30,79 @@ func (s *Server) Start(addr string) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		client := s.onNewClient(newConn)
-		buf := make([]byte, 4)
-		binary.BigEndian.PutUint32(buf, uint32(client.id))
-		s.sendToConnector(ServerConnectorID, client.id, buf)
-		go func() {
-			client.listen()
-		}()
+		clientId := s.onNewClient(newConn)
+		s.sendToConnector(
+			PackageTypeInform,
+			ServerConnectorID,
+			clientId,
+			[]byte(CommandAssignID+" "+strconv.Itoa(clientId)),
+		)
 	}
 }
 
-func (s *Server) onNewClient(client net.Conn) *Connector {
-	newConnector := Connector{
-		s, client, s.clientCounter,
-	}
-	s.clients[s.clientCounter] = &newConnector
+func (s *Server) onNewClient(client net.Conn) int {
+	s.clients[s.clientCounter] = client
+	go s.watchClient(s.clientCounter)
+	clientId := s.clientCounter
 	s.clientCounter++
-	return &newConnector
+	return clientId
 }
 
-func (s *Server) sendToConnector(srcId, targetId int, data []byte) error {
-	connector := s.clients[targetId]
-	if connector == nil {
+func (s *Server) sendToConnector(packetType, srcId, dstId int, data []byte) error {
+	conn := s.clients[dstId]
+	if conn == nil {
 		return NotFoundConnectorError
 	}
-	outMessage := NewInformPacket(srcId, targetId, data).ToBytes()
-	_, err := connector.conn.Write(outMessage)
+	_, err := conn.Write(
+		NewPacket(packetType, srcId, dstId, data).ToBytes(),
+	)
 	return err
 }
 
-type Connector struct {
-	server *Server
-	conn   net.Conn
-	id     int
-}
-
-func (c *Connector) exit() {
-	defer c.conn.Close()
-	delete(c.server.clients, c.id)
-}
-
-func (c *Connector) sendToConnector(pkgType, dst int, data []byte) error {
-	dstConn := c.server.clients[dst]
-	if dstConn == nil {
-		return InvalidTarget
+func (s *Server) broadCast(packet *Packet) {
+	for id, _ := range s.clients {
+		if id != packet.src {
+			s.sendToConnector(
+				PackageTypeBroadCast,
+				packet.src,
+				id,
+				packet.Data(),
+			)
+		}
 	}
-	_, err := dstConn.conn.Write(NewPacket(pkgType, c.id, dst, data).ToBytes())
-	return err
 }
 
-func (c *Connector) sendInformToConnector(dst int, data []byte) error {
-	return c.sendToConnector(PackageTypeInform, dst, data)
+func (s *Server) exit(id int) {
+	conn := s.clients[id]
+	if conn != nil {
+		conn.Close()
+	}
+	delete(s.clients, id)
 }
 
-func (c *Connector) listen() {
+func (s *Server) watchClient(id int) {
 	buf := make([]byte, 1000)
-	defer c.exit()
+	conn := s.clients[id]
+	defer s.exit(id)
 	for {
-		read, err := c.conn.Read(buf)
+		read, err := conn.Read(buf)
 		if err != nil {
 			if err.Error() == "EOF" {
 				continue
 			}
-			fmt.Println("Close connection: " + strconv.Itoa(c.id))
+			fmt.Println("Close connection: " + strconv.Itoa(id))
 			return
 		}
 		for _, packet := range PacketFromBytes(buf[0:read]) {
 			//fmt.Printf("\nMsg from %v: %v", packet.src, string(packet.data))
-			err = c.sendToConnector(packet.pkgType, packet.dst, packet.data)
-			if err != nil {
-				fmt.Println("error while sendInform", err)
+			switch packet.PacketType() {
+			case PackageTypeBroadCast:
+				s.broadCast(packet)
+			default:
+				err = s.sendToConnector(packet.pkgType, packet.src, packet.dst, packet.data)
+				if err != nil {
+					LOG.Error("error while sendInform", err)
+				}
 			}
 		}
 	}

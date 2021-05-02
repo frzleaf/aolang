@@ -1,13 +1,8 @@
 package main
 
-import (
-	"os"
-	"proxy"
-)
+import "proxy"
 
 func main() {
-
 	client := proxy.NewClient()
-	client.Connect(os.Args[1])
-
+	client.Run("10.0.1.105:9999")
 }
