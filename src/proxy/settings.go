@@ -24,9 +24,6 @@ type ClientConfig struct {
 	connectionConfig *ConnectionConfig
 }
 
-const CharSplitCommand = " "
-
 const CommandAssignID = "/assign"
-const CommandFindOpenTCPPort = "/port"
 const CommandFind = "/find"
 const CommandSelectTarget = "/to"

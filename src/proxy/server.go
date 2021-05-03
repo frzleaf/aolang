@@ -35,7 +35,7 @@ func (s *Server) Start(addr string) {
 			PackageTypeInform,
 			ServerConnectorID,
 			clientId,
-			[]byte(CommandToString(CommandAssignID, clientId)),
+			[]byte(CommandAssignID+" "+strconv.Itoa(clientId)),
 		)
 	}
 }

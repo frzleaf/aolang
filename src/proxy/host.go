@@ -8,25 +8,20 @@ import (
 )
 
 type Host struct {
-	hostConn          map[int]net.Conn // game connections
-	guestCon          net.Conn         // guest player connection
-	proxyServer       net.Listener     // guest player connection
-	sConn             net.Conn         // server connection
-	id                int              // connection id
-	monitor           *Monitor
-	gameConfig        *GameConfig
-	connectedHost     int
-	connectedHostPort int
-	host              bool
-	bcListener        *net.UDPConn
+	hostConn      map[int]net.Conn // game connections
+	guestCon      net.Conn         // guest player connection
+	sConn         net.Conn         // server connection
+	id            int              // connection id
+	monitor       *Monitor
+	gameConfig    *GameConfig
+	connectedHost int
 }
 
 func NewHost() *Host {
 	return &Host{
-		hostConn:          make(map[int]net.Conn),
-		gameConfig:        Warcraft3Config,
-		connectedHost:     -1,
-		connectedHostPort: -1,
+		hostConn:      make(map[int]net.Conn),
+		gameConfig:    Warcraft3Config,
+		connectedHost: -1,
 	}
 }
 
@@ -44,23 +39,20 @@ func (h *Host) BroadCast(packet *Packet) error {
 func (h *Host) BroadCastResponse(packet *Packet) error {
 	_, err := h.OnBroadCast(packet.Data(), false)
 	h.connectedHost = packet.src
-	if h.connectedHostPort <= 0 {
-		h.GetOpenPortOnConnectedHost()
-	}
 	return err
 }
 
 func (c *Host) OpenProxyHost() (err error) {
-	c.proxyServer, err = net.Listen("tcp", c.getGameBind())
+	virtualServer, err := net.Listen("tcp", c.getGameBind())
 	//c.pServer, err = net.Listen("tcp", "10.8.0.2:6110")
 	if err != nil {
 		LOG.Error(err)
 		return
 	}
-	LOG.Info("Virtual host open at:", c.proxyServer.Addr().String())
-	defer c.proxyServer.Close()
+	LOG.Info("Virtual host open at:", virtualServer.Addr().String())
+	defer virtualServer.Close()
 	for {
-		if c.guestCon, err = c.proxyServer.Accept(); err == nil {
+		if c.guestCon, err = virtualServer.Accept(); err == nil {
 			go func() {
 				defer c.guestCon.Close()
 				if c.connectedHost < 0 {
@@ -82,8 +74,6 @@ func (c *Host) OpenProxyHost() (err error) {
 					}
 				}
 			}()
-		} else {
-			break
 		}
 	}
 	LOG.Info("Exit proxy")
@@ -120,8 +110,13 @@ func (h *Host) OpenBroadCastListener() error {
 func (h *Host) OnBroadCast(receive []byte, getResponse bool) ([]byte, error) {
 	rAddr := net.UDPAddr{
 		Port: h.gameConfig.udpPort,
-		IP:   net.ParseIP(h.gameConfig.internalRemoteIp),
+		IP:   net.ParseIP(h.gameConfig.localIp),
 	}
+
+	//lAddr := net.UDPAddr{
+	//	Port: 6111,
+	//	IP:   net.ParseIP(h.gameConfig.internalRemoteIp),
+	//}
 
 	scannerConn, err := net.DialUDP("udp4", nil, &rAddr)
 	if err != nil {
@@ -143,14 +138,24 @@ func (h *Host) OnBroadCast(receive []byte, getResponse bool) ([]byte, error) {
 	return nil, err
 }
 
-func (h *Host) GetOpenPortOnConnectedHost() error {
-	_, err := h.sConn.Write(NewInformPacket(h.id, h.connectedHost, []byte(CommandFindOpenTCPPort)).ToBytes())
+func (h *Host) OnBroadCastResponse(packet *Packet) error {
+	rAddr := net.UDPAddr{
+		Port: h.gameConfig.udpPort,
+		IP:   net.ParseIP(h.gameConfig.localIp),
+	}
+
+	scannerConn, err := net.DialUDP("udp4", nil, &rAddr)
+	if err != nil {
+		return err
+	}
+
+	defer scannerConn.Close()
+	_, err = scannerConn.Write(packet.Data())
 	return err
 }
 
 func (h *Host) DataToHost(packet *Packet) (err error) {
 	hConn := h.hostConn[packet.SrcAddr()]
-	h.proxyServer.Close()
 	if hConn == nil {
 		hConn, err = h.PrepareNewGameConnection(packet.SrcAddr())
 		if err != nil {
@@ -213,7 +218,7 @@ func (h *Host) start(serverAddr string) (err error) {
 	h.gameConfig.internalRemoteIp = strings.Split(dial.LocalAddr().String(), ":")[0]
 	h.sConn = dial
 	go h.OpenBroadCastListener()
-	//go h.OpenProxyHost()
+	go h.OpenProxyHost()
 	return h.watchGameData()
 }
 
@@ -247,12 +252,10 @@ func (h *Host) gameReceiveMessage(packet *Packet) (err error) {
 
 	if packet.src == ServerConnectorID {
 		h.resolveCommandFromServer(packet)
-		return nil
 	}
 
 	switch packet.pkgType {
 	case PackageTypeInform:
-		h.resolveCommandFromServer(packet)
 	case PackageTypeBroadCast:
 		err = h.BroadCast(packet)
 	case PackageTypeToHost:
@@ -268,7 +271,7 @@ func (h *Host) gameReceiveMessage(packet *Packet) (err error) {
 func (h *Host) resolveCommandFromServer(packet *Packet) {
 	serverCmd := string(packet.Data())
 	split := strings.Split(serverCmd, " ")
-	if len(split) < 1 {
+	if len(split) <= 1 {
 		LOG.Infof("Server - %v", string(packet.Data()))
 		return
 	}
@@ -281,26 +284,13 @@ func (h *Host) resolveCommandFromServer(packet *Packet) {
 			h.id = atoi
 			LOG.Infof("Connection ID assigned: ", h.id)
 		}
-	case CommandFindOpenTCPPort:
-		if len(split) > 1 {
-			if openPort, err := strconv.Atoi(split[1]); err == nil {
-				h.connectedHostPort = openPort
-				go h.OpenProxyHost()
-			}
-		} else {
-			if openPort := FindPortOpen(h.gameConfig.localIp, h.gameConfig.tcpPorts); openPort > 0 {
-				h.sConn.Write(
-					NewInformPacket(h.id, packet.src, []byte(CommandToString(CommandFindOpenTCPPort, openPort))).ToBytes(),
-				)
-			}
-		}
 	default:
 		LOG.Warn("Invalid command: ", serverCmd)
 	}
 }
 
 func (h *Host) getGameBind() string {
-	return h.gameConfig.localIp + ":" + strconv.Itoa(h.connectedHostPort)
+	return h.gameConfig.localIp + ":" + strconv.Itoa(h.gameConfig.tcpPorts[0])
 }
 
 func (h *Host) getVirtualHostGameBind() string {
