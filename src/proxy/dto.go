@@ -9,7 +9,8 @@ const (
 	PackageTypeInform
 	PackageTypeBroadCast
 	PackageTypeBroadCastResponse
-	PackageTypeConnectHost
+	PackageTypeToHost
+	PackageTypeToGuest
 )
 
 type Packet struct {

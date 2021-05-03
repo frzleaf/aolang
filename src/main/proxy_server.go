@@ -1,12 +1,13 @@
 package main
 
 import (
+	"os"
 	"proxy"
 )
 
 func main() {
 
 	server := proxy.NewServer()
-	server.Start("10.0.1.105:9999")
+	server.Start(os.Args[1])
 
 }

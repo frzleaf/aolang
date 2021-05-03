@@ -35,7 +35,7 @@ func (s *Server) Start(addr string) {
 			PackageTypeInform,
 			ServerConnectorID,
 			clientId,
-			[]byte(CommandAssignID+" "+strconv.Itoa(clientId)),
+			[]byte(CommandToString(CommandAssignID, clientId)),
 		)
 	}
 }
@@ -97,6 +97,7 @@ func (s *Server) watchClient(id int) {
 			//fmt.Printf("\nMsg from %v: %v", packet.src, string(packet.data))
 			switch packet.PacketType() {
 			case PackageTypeBroadCast:
+				LOG.Info("Broadcast message size: %v", packet.Len())
 				s.broadCast(packet)
 			default:
 				err = s.sendToConnector(packet.pkgType, packet.src, packet.dst, packet.data)
