@@ -62,7 +62,7 @@ func (h *Host) BroadCastResponse(packet *Packet) error {
 	h.connectedHostPort = int(binary.BigEndian.Uint32(gameData[0:4]))
 	_, err := h.OnBroadCast(gameData[4:], false)
 	if h.virtualHost == nil {
-		err = h.OpenProxyHost()
+		go h.OpenProxyHost()
 	}
 	return err
 }
@@ -75,14 +75,18 @@ func (c *Host) OpenProxyHost() (err error) {
 	}
 	LOG.Info("Virtual host open at:", c.virtualHost.Addr().String())
 	defer func() {
-		c.virtualHost.Close()
+		if c.virtualHost != nil {
+			c.virtualHost.Close()
+		}
 		c.virtualHost = nil
 	}()
 	for {
 		if c.guestCon, err = c.virtualHost.Accept(); err == nil {
 			go func() {
 				defer func() {
-					c.guestCon.Close()
+					if c.guestCon != nil {
+						c.guestCon.Close()
+					}
 					c.guestCon = nil
 				}()
 				if c.connectedHost < 0 {
