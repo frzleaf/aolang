@@ -59,7 +59,10 @@ func (h *Host) BroadCastResponse(packet *Packet) error {
 	}
 
 	h.connectedHost = packet.src
-	h.connectedHostPort = int(binary.BigEndian.Uint32(gameData[0:4]))
+	// The list game from host return always more than 100 bytes
+	if len(gameData) > 100 {
+		h.connectedHostPort = int(binary.BigEndian.Uint32(gameData[0:4]))
+	}
 	_, err := h.OnBroadCast(gameData[4:], false)
 	if h.virtualHost == nil {
 		go h.OpenProxyHost()
