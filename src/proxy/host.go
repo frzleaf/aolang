@@ -1,6 +1,9 @@
 package proxy
 
 import (
+	"encoding/binary"
+	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -8,57 +11,81 @@ import (
 )
 
 type Host struct {
-	hostConn      map[int]net.Conn // game connections
-	guestCon      net.Conn         // guest player connection
-	sConn         net.Conn         // server connection
-	id            int              // connection id
-	monitor       *Monitor
-	gameConfig    *GameConfig
-	connectedHost int
+	hostConn          map[int]net.Conn // game connections
+	hostPort          int              // local host port
+	guestCon          net.Conn         // guest player connection
+	sConn             net.Conn         // server connection
+	virtualHost       net.Listener     // local virtual host
+	id                int              // connection id
+	monitor           *Monitor
+	gameConfig        *GameConfig
+	connectedHost     int
+	connectedHostPort int
 }
 
 func NewHost() *Host {
 	return &Host{
-		hostConn:      make(map[int]net.Conn),
-		gameConfig:    Warcraft3Config,
-		connectedHost: -1,
+		hostConn:          make(map[int]net.Conn),
+		gameConfig:        Warcraft3Config,
+		connectedHost:     -1,
+		connectedHostPort: -1,
+		hostPort:          -1,
 	}
 }
 
 func (h *Host) BroadCast(packet *Packet) error {
 	returnData, err := h.OnBroadCast(packet.Data(), true)
-	if err != nil {
+	if err != nil || returnData == nil {
 		return err
 	}
+
+	openPort := FindPortOpen(h.gameConfig.localIp, h.gameConfig.tcpPorts)
+	h.hostPort = openPort
+	portBinary := make([]byte, 4)
+	binary.BigEndian.PutUint32(portBinary, uint32(openPort))
+	sendData := make([]byte, 4+len(returnData))
+	copy(sendData, portBinary)
+	copy(sendData[4:], returnData)
 	_, err = h.sConn.Write(
-		NewPacket(PackageTypeBroadCastResponse, h.id, packet.SrcAddr(), returnData).ToBytes(),
+		NewPacket(PackageTypeBroadCastResponse, h.id, packet.SrcAddr(), sendData).ToBytes(),
 	)
 	return err
 }
 
 func (h *Host) BroadCastResponse(packet *Packet) error {
-	_, err := h.OnBroadCast(packet.Data(), false)
+	gameData := packet.Data()
+	if len(gameData) <= 4 {
+		return errors.New("invalid broadcast response")
+	}
+
 	h.connectedHost = packet.src
+	h.connectedHostPort = int(binary.BigEndian.Uint32(gameData[0:4]))
+	_, err := h.OnBroadCast(gameData[4:], false)
+	if h.virtualHost == nil {
+		err = h.OpenProxyHost()
+	}
 	return err
 }
 
 func (c *Host) OpenProxyHost() (err error) {
-	virtualServer, err := net.Listen("tcp", c.getGameBind())
-	//c.pServer, err = net.Listen("tcp", "10.8.0.2:6110")
+	c.virtualHost, err = net.Listen("tcp", c.getVirtualHostGameBind())
 	if err != nil {
 		LOG.Error(err)
 		return
 	}
-	LOG.Info("Virtual host open at:", virtualServer.Addr().String())
-	defer virtualServer.Close()
+	LOG.Info("Virtual host open at:", c.virtualHost.Addr().String())
+	defer func() {
+		c.virtualHost.Close()
+		c.virtualHost = nil
+	}()
 	for {
-		if c.guestCon, err = virtualServer.Accept(); err == nil {
+		if c.guestCon, err = c.virtualHost.Accept(); err == nil {
 			go func() {
 				defer c.guestCon.Close()
 				if c.connectedHost < 0 {
 					return
 				}
-				LOG.Info("Game joined to: ", c.guestCon.LocalAddr())
+				LOG.Info("Game joined to:", c.guestCon.LocalAddr())
 				targetHost := c.connectedHost
 				buf := make([]byte, 1000)
 				for {
@@ -66,7 +93,8 @@ func (c *Host) OpenProxyHost() (err error) {
 						if err2.Error() == "EOF" {
 							continue
 						}
-						LOG.Error(err)
+						fmt.Println(err2)
+						LOG.Error(err2)
 						break
 					} else {
 						// TODO need parse the packet to specify the target host
@@ -113,11 +141,6 @@ func (h *Host) OnBroadCast(receive []byte, getResponse bool) ([]byte, error) {
 		IP:   net.ParseIP(h.gameConfig.localIp),
 	}
 
-	//lAddr := net.UDPAddr{
-	//	Port: 6111,
-	//	IP:   net.ParseIP(h.gameConfig.internalRemoteIp),
-	//}
-
 	scannerConn, err := net.DialUDP("udp4", nil, &rAddr)
 	if err != nil {
 		return nil, err
@@ -136,22 +159,6 @@ func (h *Host) OnBroadCast(receive []byte, getResponse bool) ([]byte, error) {
 		}
 	}
 	return nil, err
-}
-
-func (h *Host) OnBroadCastResponse(packet *Packet) error {
-	rAddr := net.UDPAddr{
-		Port: h.gameConfig.udpPort,
-		IP:   net.ParseIP(h.gameConfig.localIp),
-	}
-
-	scannerConn, err := net.DialUDP("udp4", nil, &rAddr)
-	if err != nil {
-		return err
-	}
-
-	defer scannerConn.Close()
-	_, err = scannerConn.Write(packet.Data())
-	return err
 }
 
 func (h *Host) DataToHost(packet *Packet) (err error) {
@@ -189,16 +196,16 @@ func (h *Host) SendDataToServer(packet *Packet) (err error) {
 }
 
 func (h *Host) DataHostToServer(srcId int) {
-	gConn := h.hostConn[srcId]
+	hConn := h.hostConn[srcId]
 	buf := make([]byte, 1000)
 	for {
-		read, err := gConn.Read(buf)
+		read, err := hConn.Read(buf)
 		if err != nil {
 			if err.Error() == "EOF" {
 				continue
 			}
 			h.monitor.onError(err)
-			gConn.Close()
+			hConn.Close()
 			delete(h.hostConn, srcId)
 			break
 		} else {
@@ -252,6 +259,7 @@ func (h *Host) gameReceiveMessage(packet *Packet) (err error) {
 
 	if packet.src == ServerConnectorID {
 		h.resolveCommandFromServer(packet)
+		return nil
 	}
 
 	switch packet.pkgType {
@@ -290,11 +298,11 @@ func (h *Host) resolveCommandFromServer(packet *Packet) {
 }
 
 func (h *Host) getGameBind() string {
-	return h.gameConfig.localIp + ":" + strconv.Itoa(h.gameConfig.tcpPorts[0])
+	return h.gameConfig.localIp + ":" + strconv.Itoa(h.hostPort)
 }
 
 func (h *Host) getVirtualHostGameBind() string {
-	return h.gameConfig.internalRemoteIp + ":" + strconv.Itoa(h.gameConfig.tcpPorts[0])
+	return h.gameConfig.localIp + ":" + strconv.Itoa(h.connectedHostPort)
 }
 
 func (h *Host) Close() {
