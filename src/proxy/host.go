@@ -44,10 +44,11 @@ func (h *Host) BroadCast(packet *Packet) error {
 		h.isHost = true
 	}
 
-	openPort := FindPortOpen(h.gameConfig.localIp, h.gameConfig.tcpPorts)
-	h.hostPort = openPort
+	if h.isHost && h.hostPort < 0 {
+		h.hostPort = FindPortOpen(h.gameConfig.localIp, h.gameConfig.tcpPorts)
+	}
 	portBinary := make([]byte, 4)
-	binary.BigEndian.PutUint32(portBinary, uint32(openPort))
+	binary.BigEndian.PutUint32(portBinary, uint32(h.hostPort))
 	sendData := make([]byte, 4+len(returnData))
 	copy(sendData, portBinary)
 	copy(sendData[4:], returnData)
@@ -64,10 +65,11 @@ func (h *Host) BroadCastResponse(packet *Packet) error {
 	}
 
 	h.connectedHost = packet.src
-	// The list game from host return always more than 100 bytes
-	if len(gameData) > 100 {
-		h.connectedHostPort = int(binary.BigEndian.Uint32(gameData[0:4]))
+	dedicatePort := int(binary.BigEndian.Uint32(gameData[0:4]))
+	if 0 < dedicatePort && dedicatePort < (2<<16) {
+		h.connectedHostPort = dedicatePort
 	}
+
 	_, err := h.OnBroadCast(gameData[4:], false)
 	if h.virtualHost == nil {
 		go h.OpenProxyHost()
