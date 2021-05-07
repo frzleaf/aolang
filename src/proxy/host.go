@@ -20,6 +20,7 @@ type Host struct {
 	gameConfig        *GameConfig
 	connectedHost     int
 	connectedHostPort int
+	isHost            bool
 }
 
 func NewHost() *Host {
@@ -37,6 +38,10 @@ func (h *Host) BroadCast(packet *Packet) error {
 	returnData, err := h.OnBroadCast(packet.Data(), true)
 	if err != nil || returnData == nil {
 		return err
+	}
+
+	if len(returnData) > 100 {
+		h.isHost = true
 	}
 
 	openPort := FindPortOpen(h.gameConfig.localIp, h.gameConfig.tcpPorts)
@@ -71,6 +76,9 @@ func (h *Host) BroadCastResponse(packet *Packet) error {
 }
 
 func (c *Host) OpenProxyHost() (err error) {
+	if c.isHost {
+		return
+	}
 	c.virtualHost, err = net.Listen("tcp", c.getVirtualHostGameBind())
 	if err != nil {
 		LOG.Error(err)
@@ -137,6 +145,9 @@ func (h *Host) OpenBroadCastListener() error {
 		if read, err := bcListener.Read(buf); err != nil {
 			LOG.Warn("Can not read broadcast message", err)
 		} else {
+			if h.isHost {
+				continue
+			}
 			LOG.Infof("Receive broadcast message, len = %v", len(buf[0:read]))
 			h.sConn.Write(NewPacket(
 				PackageTypeBroadCast,
@@ -283,6 +294,7 @@ func (h *Host) gameReceiveMessage(packet *Packet) (err error) {
 	case PackageTypeToHost:
 		err = h.DataToHost(packet)
 	case PackageTypeToGuest:
+		h.isHost = false
 		err = h.DataToGuest(packet)
 	case PackageTypeBroadCastResponse:
 		err = h.BroadCastResponse(packet)
