@@ -92,8 +92,9 @@ func (c *Host) OpenProxyHost() (err error) {
 				if c.connectedHost < 0 {
 					return
 				}
-				LOG.Info("Game joined to:", c.guestCon.LocalAddr())
 				targetHost := c.connectedHost
+				_, _ = c.sConn.Write(NewInformPacket(c.id, targetHost, []byte(CommandExitGame)).ToBytes())
+				LOG.Info("Game joined to:", c.guestCon.LocalAddr())
 				buf := make([]byte, 1000)
 				for {
 					if read, err2 := c.guestCon.Read(buf); err2 != nil {
@@ -272,6 +273,8 @@ func (h *Host) gameReceiveMessage(packet *Packet) (err error) {
 
 	switch packet.pkgType {
 	case PackageTypeInform:
+		h.resolveCommandFromServer(packet)
+		return nil
 	case PackageTypeBroadCast:
 		err = h.BroadCast(packet)
 	case PackageTypeToHost:
@@ -287,18 +290,27 @@ func (h *Host) gameReceiveMessage(packet *Packet) (err error) {
 func (h *Host) resolveCommandFromServer(packet *Packet) {
 	serverCmd := string(packet.Data())
 	split := strings.Split(serverCmd, " ")
-	if len(split) <= 1 {
+	if len(split) < 1 {
 		LOG.Infof("Server - %v", string(packet.Data()))
 		return
 	}
 	switch split[0] {
 	case CommandAssignID:
-		atoi, err := strconv.Atoi(split[1])
-		if err != nil {
-			LOG.Error("Invalid connection ID: ", split[1])
+		if len(split) < 2 {
+			LOG.Warnf("Invalid argument - %v", string(packet.Data()))
 		} else {
-			h.id = atoi
-			LOG.Infof("Connection ID assigned: ", h.id)
+			connectionId, err := strconv.Atoi(split[1])
+			if err != nil {
+				LOG.Error("Invalid connection ID: ", split[1])
+			} else {
+				h.id = connectionId
+				LOG.Infof("Connection ID assigned: ", h.id)
+			}
+		}
+	case CommandExitGame:
+		if h.hostConn[packet.SrcAddr()] != nil {
+			h.hostConn[packet.SrcAddr()].Close()
+			delete(h.hostConn, packet.SrcAddr())
 		}
 	default:
 		LOG.Warn("Invalid command: ", serverCmd)
