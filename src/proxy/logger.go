@@ -60,9 +60,9 @@ func (l *Logger) log(logLevel int, format string, args ...interface{}) {
 	}
 	if logger != nil {
 		if format == "" {
-			logger.Println(args)
+			logger.Println(args...)
 		} else {
-			logger.Printf(format, args)
+			logger.Printf(format, args...)
 		}
 	}
 }

@@ -1,10 +1,8 @@
 package proxy
 
 import (
-	"fmt"
 	"log"
 	"net"
-	"strconv"
 )
 
 type Server struct {
@@ -24,7 +22,7 @@ func (s *Server) Start(addr string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Server is running at: " + addr)
+	LOG.Info("Server is running at:", addr)
 	for {
 		newConn, err := listen.Accept()
 		if err != nil {
@@ -90,14 +88,13 @@ func (s *Server) watchClient(id int) {
 			if err.Error() == "EOF" {
 				continue
 			}
-			fmt.Println("Close connection: " + strconv.Itoa(id))
+			LOG.Info("Close connection:", id)
 			return
 		}
 		for _, packet := range PacketFromBytes(buf[0:read]) {
-			//fmt.Printf("\nMsg from %v: %v", packet.src, string(packet.data))
 			switch packet.PacketType() {
 			case PackageTypeBroadCast:
-				LOG.Info("Broadcast message size: %v", packet.Len())
+				LOG.Infof("Broadcast message size: %v", packet.Len())
 				s.broadCast(packet)
 			default:
 				err = s.sendToConnector(packet.pkgType, packet.src, packet.dst, packet.data)

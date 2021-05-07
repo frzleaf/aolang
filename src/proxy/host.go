@@ -86,7 +86,6 @@ func (c *Host) OpenProxyHost() (err error) {
 	}
 	c.virtualHost, err = net.Listen("tcp", c.getVirtualHostGameBind())
 	if err != nil {
-		LOG.Error(err)
 		return
 	}
 	LOG.Info("Virtual host open at:", c.virtualHost.Addr().String())
@@ -110,8 +109,8 @@ func (c *Host) OpenProxyHost() (err error) {
 				}
 				targetHost := c.connectedHost
 				_, _ = c.sConn.Write(NewInformPacket(c.id, targetHost, []byte(CommandExitGame)).ToBytes())
-				time.Sleep(time.Millisecond * 500)
-				LOG.Info("Game joined to: %v (%v)", targetHost, c.guestCon.LocalAddr())
+				time.Sleep(time.Millisecond * 100)
+				LOG.Infof("Game joined to: %v (%v)", targetHost, c.guestCon.LocalAddr())
 				buf := make([]byte, 1000)
 				for {
 					if read, err2 := c.guestCon.Read(buf); err2 != nil {
@@ -338,7 +337,7 @@ func (h *Host) resolveCommandFromServer(packet *Packet) {
 				LOG.Error("Invalid connection ID: ", split[1])
 			} else {
 				h.id = connectionId
-				LOG.Infof("Connection ID assigned: ", h.id)
+				LOG.Infof("Connection ID assigned: %v", h.id)
 			}
 		}
 	case CommandExitGame:
