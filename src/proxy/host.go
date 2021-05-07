@@ -3,7 +3,6 @@ package proxy
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -30,6 +29,7 @@ func NewHost() *Host {
 		connectedHost:     -1,
 		connectedHostPort: -1,
 		hostPort:          -1,
+		monitor:           &Monitor{},
 	}
 }
 
@@ -81,7 +81,10 @@ func (c *Host) OpenProxyHost() (err error) {
 	for {
 		if c.guestCon, err = c.virtualHost.Accept(); err == nil {
 			go func() {
-				defer c.guestCon.Close()
+				defer func() {
+					c.guestCon.Close()
+					c.guestCon = nil
+				}()
 				if c.connectedHost < 0 {
 					return
 				}
@@ -93,12 +96,14 @@ func (c *Host) OpenProxyHost() (err error) {
 						if err2.Error() == "EOF" {
 							continue
 						}
-						fmt.Println(err2)
 						LOG.Error(err2)
 						break
 					} else {
 						// TODO need parse the packet to specify the target host
-						c.sConn.Write(NewPacket(PackageTypeToHost, c.id, targetHost, buf[0:read]).ToBytes())
+						_, err2 := c.sConn.Write(NewPacket(PackageTypeToHost, c.id, targetHost, buf[0:read]).ToBytes())
+						if err2 != nil {
+							LOG.Warn("Error send host:", err2)
+						}
 					}
 				}
 			}()
@@ -217,13 +222,12 @@ func (h *Host) DataHostToServer(srcId int) {
 }
 
 func (h *Host) start(serverAddr string) (err error) {
-	dial, err := net.Dial("tcp4", serverAddr)
+	h.sConn, err = net.Dial("tcp4", serverAddr)
 	if err != nil {
-		return err
+		return
 	}
 	// Set up broadcast watchClient address
-	h.gameConfig.internalRemoteIp = strings.Split(dial.LocalAddr().String(), ":")[0]
-	h.sConn = dial
+	h.gameConfig.internalRemoteIp = strings.Split(h.sConn.LocalAddr().String(), ":")[0]
 	go h.OpenBroadCastListener()
 	go h.OpenProxyHost()
 	return h.watchGameData()
