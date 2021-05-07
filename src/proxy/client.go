@@ -7,15 +7,15 @@ import (
 	"strings"
 )
 
-var dstClient int
-
 type Client struct {
-	host *Host
+	host      *Host
+	dstClient int
 }
 
 func NewClient() *Client {
 	return &Client{
-		host: NewHost(),
+		host:      NewHost(),
+		dstClient: ServerConnectorID,
 	}
 }
 
@@ -50,7 +50,7 @@ func (c *Client) readCommand() {
 					LOG.Info("Invalid args: ", err)
 					continue
 				}
-				dstClient = input2nd
+				c.dstClient = input2nd
 				LOG.Info("Selected: ", input2nd)
 			}
 		} else if strings.HasPrefix(lineStr, "/find") {
@@ -59,7 +59,7 @@ func (c *Client) readCommand() {
 			c.host.Close()
 			return
 		} else {
-			if err := c.host.SendDataToServer(NewInformPacket(c.host.id, dstClient, line)); err != nil {
+			if err := c.host.SendDataToServer(NewInformPacket(c.host.id, c.dstClient, line)); err != nil {
 				LOG.Error(err)
 			}
 		}
