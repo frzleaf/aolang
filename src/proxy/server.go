@@ -7,6 +7,7 @@ import (
 
 type Server struct {
 	clients       map[int]net.Conn
+	hostData      map[int][]byte
 	clientCounter int
 }
 
@@ -14,6 +15,7 @@ func NewServer() *Server {
 	return &Server{
 		clientCounter: 1,
 		clients:       make(map[int]net.Conn),
+		hostData:      make(map[int][]byte),
 	}
 }
 
@@ -76,6 +78,7 @@ func (s *Server) exit(id int) {
 		conn.Close()
 	}
 	delete(s.clients, id)
+	delete(s.hostData, id)
 }
 
 func (s *Server) watchClient(id int) {
@@ -96,7 +99,26 @@ func (s *Server) watchClient(id int) {
 			case PackageTypeBroadCast:
 				LOG.Infof("Broadcast message size: %v", packet.Len())
 				s.broadCast(packet)
+			case PackageTypeGameListPush:
+				s.hostData[packet.SrcAddr()] = packet.Data()
+			case PackageTypeGameListGet:
+				if len(s.hostData) == 0 {
+					LOG.Debug("No game found")
+				} else {
+					// Get the last game
+					lastGame := -1
+					for i := range s.hostData {
+						lastGame = i
+					}
+					err = s.sendToConnector(PackageTypeGameListGet, lastGame, packet.SrcAddr(), s.hostData[lastGame])
+					if err != nil {
+						LOG.Error("Error while send list game", err)
+					}
+				}
 			default:
+				if packet.DstAddr() == ServerConnectorID {
+					continue
+				}
 				err = s.sendToConnector(packet.pkgType, packet.src, packet.dst, packet.data)
 				if err != nil {
 					LOG.Error("error while sendInform", err)

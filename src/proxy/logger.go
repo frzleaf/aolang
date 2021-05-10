@@ -21,11 +21,11 @@ type Logger struct {
 	loggers  map[int]*log.Logger
 }
 
-func NewLogger(out io.Writer) *Logger {
+func NewLogger(out io.Writer, logLevel int) *Logger {
 	return &Logger{
 		out:      out,
 		loggers:  make(map[int]*log.Logger),
-		logLevel: InfoLevel,
+		logLevel: logLevel,
 	}
 }
 

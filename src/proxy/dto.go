@@ -9,6 +9,8 @@ const (
 	PackageTypeInform
 	PackageTypeBroadCast
 	PackageTypeBroadCastResponse
+	PackageTypeGameListPush
+	PackageTypeGameListGet
 	PackageTypeToHost
 	PackageTypeToGuest
 )

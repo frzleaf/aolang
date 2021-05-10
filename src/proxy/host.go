@@ -37,7 +37,7 @@ func NewHost() *Host {
 	}
 }
 
-func (h *Host) BroadCast(packet *Packet) error {
+func (h *Host) BroadCast(packet *Packet, responsePacketType int) error {
 	returnData, err := h.OnBroadCast(packet.Data(), true)
 	if err != nil || returnData == nil {
 		return err
@@ -56,7 +56,7 @@ func (h *Host) BroadCast(packet *Packet) error {
 	copy(sendData, portBinary)
 	copy(sendData[4:], returnData)
 	_, err = h.sConn.Write(
-		NewPacket(PackageTypeBroadCastResponse, h.id, packet.SrcAddr(), sendData).ToBytes(),
+		NewPacket(responsePacketType, h.id, packet.SrcAddr(), sendData).ToBytes(),
 	)
 	return err
 }
@@ -74,46 +74,47 @@ func (h *Host) BroadCastResponse(packet *Packet) error {
 	}
 
 	_, err := h.OnBroadCast(gameData[4:], false)
-	if h.virtualHost == nil {
+	if h.virtualHost == nil && h.connectedHost != h.id {
 		go h.OpenProxyHost()
 	}
 	return err
 }
 
-func (c *Host) OpenProxyHost() (err error) {
-	if c.isHost {
+func (h *Host) OpenProxyHost() (err error) {
+	if h.isHost {
 		return
 	}
-	c.virtualHost, err = net.Listen("tcp", c.getVirtualHostGameBind())
+	h.virtualHost, err = net.Listen("tcp", h.getVirtualHostGameBind())
 	if err != nil {
 		return
 	}
-	LOG.Info("Virtual host open at:", c.virtualHost.Addr().String())
+	LOG.Info("Virtual host open at:", h.virtualHost.Addr().String())
 	defer func() {
-		if c.virtualHost != nil {
-			c.virtualHost.Close()
+		if h.virtualHost != nil {
+			h.virtualHost.Close()
 		}
-		c.virtualHost = nil
+		h.virtualHost = nil
 	}()
 	for {
-		if c.guestCon, err = c.virtualHost.Accept(); err == nil {
+		if gConn, err := h.virtualHost.Accept(); err == nil {
+			h.guestCon = gConn
 			go func() {
 				defer func() {
-					if c.guestCon != nil {
-						c.guestCon.Close()
+					if gConn != nil {
+						gConn.Close()
 					}
-					c.guestCon = nil
+					gConn = nil
 				}()
-				if c.connectedHost < 0 {
+				if h.connectedHost < 0 {
 					return
 				}
-				targetHost := c.connectedHost
-				_, _ = c.sConn.Write(NewInformPacket(c.id, targetHost, []byte(CommandExitGame)).ToBytes())
+				targetHost := h.connectedHost
+				_, _ = h.sConn.Write(NewInformPacket(h.id, targetHost, []byte(CommandExitGame)).ToBytes())
 				time.Sleep(time.Millisecond * 100)
-				LOG.Infof("Game joined to: %v (%v)", targetHost, c.guestCon.LocalAddr())
+				LOG.Infof("Game joined to: %v (%v)", targetHost, gConn.LocalAddr())
 				buf := make([]byte, 1000)
 				for {
-					if read, err2 := c.guestCon.Read(buf); err2 != nil {
+					if read, err2 := gConn.Read(buf); err2 != nil {
 						if err2.Error() == "EOF" {
 							continue
 						}
@@ -121,7 +122,7 @@ func (c *Host) OpenProxyHost() (err error) {
 						break
 					} else {
 						// TODO need parse the packet to specify the target host
-						_, err2 := c.sConn.Write(NewPacket(PackageTypeToHost, c.id, targetHost, buf[0:read]).ToBytes())
+						_, err2 := h.sConn.Write(NewPacket(PackageTypeToHost, h.id, targetHost, buf[0:read]).ToBytes())
 						if err2 != nil {
 							LOG.Warn("Error send host:", err2)
 						}
@@ -266,7 +267,15 @@ func (h *Host) start(serverAddr string) (err error) {
 	}
 	// Set up broadcast watchClient address
 	h.gameConfig.internalRemoteIp = strings.Split(h.sConn.LocalAddr().String(), ":")[0]
-	go h.OpenBroadCastListener()
+	go func() {
+		for {
+			go h.getLocalhostGameAndSendToServer()
+			if !h.isHost {
+				go h.getServerGame()
+			}
+			time.Sleep(time.Second)
+		}
+	}()
 	return h.watchGameData()
 }
 
@@ -307,15 +316,18 @@ func (h *Host) gameReceiveMessage(packet *Packet) (err error) {
 	case PackageTypeInform:
 		h.resolveCommandFromServer(packet)
 		return nil
-	case PackageTypeBroadCast:
-		err = h.BroadCast(packet)
+	//case PackageTypeBroadCast:
+	//err = h.BroadCast(packet)
 	case PackageTypeToHost:
 		err = h.DataToHost(packet)
 	case PackageTypeToGuest:
 		h.isHost = false
 		err = h.DataToGuest(packet)
-	case PackageTypeBroadCastResponse:
-		err = h.BroadCastResponse(packet)
+	case PackageTypeGameListGet:
+		h.isHost = false
+		h.sendServerGameToLocal(packet)
+		//case PackageTypeBroadCastResponse:
+		//	err = h.BroadCastResponse(packet)
 	}
 	return err
 }
@@ -353,6 +365,24 @@ func (h *Host) getGameBind() string {
 
 func (h *Host) getVirtualHostGameBind() string {
 	return h.gameConfig.localIp + ":" + strconv.Itoa(h.connectedHostPort)
+}
+
+func (h *Host) getLocalhostGameAndSendToServer() {
+	i := byte(time.Now().Second() % 10)
+	bytes := []byte{0xf7, 0x2f, 0x10, 0x00, 0x50, 0x58, 0x33, 0x57, 0x18, 0x00, 0x00, 0x00, i, 0x00, 0x00, 0x00}
+	if gameListData, err := h.OnBroadCast(bytes, true); err == nil && len(gameListData) > 0 {
+		h.BroadCast(NewPacket(PackageTypeGameListPush, ServerConnectorID, h.id, bytes), PackageTypeGameListPush)
+	}
+}
+
+func (h *Host) getServerGame() {
+	h.sConn.Write(
+		NewPacket(PackageTypeGameListGet, h.id, ServerConnectorID, nil).ToBytes(),
+	)
+}
+
+func (h *Host) sendServerGameToLocal(packet *Packet) {
+	h.BroadCastResponse(packet)
 }
 
 func (h *Host) Close() {
