@@ -8,12 +8,14 @@ import (
 type Server struct {
 	clients       map[int]net.Conn
 	clientCounter int
+	stopped       bool
 }
 
 func NewServer() *Server {
 	return &Server{
 		clientCounter: 1,
 		clients:       make(map[int]net.Conn),
+		stopped:       false,
 	}
 }
 
@@ -23,7 +25,7 @@ func (s *Server) Start(addr string) {
 		log.Fatal(err)
 	}
 	LOG.Info("Server is running at:", addr)
-	for {
+	for !s.stopped {
 		newConn, err := listen.Accept()
 		if err != nil {
 			log.Fatal(err)
@@ -76,6 +78,13 @@ func (s *Server) exit(id int) {
 		conn.Close()
 	}
 	delete(s.clients, id)
+}
+
+func (s *Server) Close() {
+	s.stopped = true
+	for _, conn := range s.clients {
+		conn.Close()
+	}
 }
 
 func (s *Server) watchClient(id int) {

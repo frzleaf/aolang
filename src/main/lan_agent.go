@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -138,7 +139,7 @@ func intermediate(tcpConn net.Conn, rTcpAddr net.TCPAddr, onExit func()) {
 		defer onExit()
 		for {
 			if r, err1 := tcpConn.Read(buf1); err1 != nil {
-				if err1.Error() != "EOF" {
+				if err1 != io.EOF {
 					fmt.Println("Có lỗi xảy ra:" + err1.Error())
 				}
 				return
@@ -152,7 +153,7 @@ func intermediate(tcpConn net.Conn, rTcpAddr net.TCPAddr, onExit func()) {
 		defer rtcp.Close()
 		for {
 			if r, err1 := rtcp.Read(buf2); err1 != nil {
-				if err1.Error() != "EOF" {
+				if err1 != io.EOF {
 					fmt.Println("Có lỗi xảy ra:" + err1.Error())
 				}
 				return
