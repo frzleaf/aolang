@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"errors"
+	"io"
 	"net"
+	"time"
 )
 
 type LocalConnector struct {
@@ -54,7 +56,7 @@ func (l *LocalConnector) onData(onDataFunc func([]byte)) {
 }
 
 func (l *LocalConnector) startListen() error {
-	if l.gConn != nil {
+	if l.gConn == nil {
 		listener, err := net.Listen("tcp", l.localAddr)
 		if err != nil {
 			return err
@@ -66,7 +68,12 @@ func (l *LocalConnector) startListen() error {
 				for {
 					read, err := l.gConn.Read(buffered)
 					if err != nil {
-						break
+						if err == io.EOF {
+							time.Sleep(time.Millisecond * 100)
+							continue
+						} else {
+							break
+						}
 					}
 					l.onDataFunc(buffered[0:read])
 				}

@@ -62,9 +62,10 @@ func (h *MockHostApp) onNewClient(conn net.Conn) {
 		for !h.stopped {
 			if read, err := conn.Read(buf); err != nil {
 				if err == io.EOF {
+					continue
+				} else {
 					return
 				}
-				fmt.Println("error on reading guest data", err)
 			} else {
 				readData := buf[0:read]
 				if h.onDataFunc != nil {

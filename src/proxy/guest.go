@@ -32,15 +32,15 @@ func (g *Guest) selectHost(hostId int) {
 }
 
 func (g *Guest) openProxy() (err error) {
-	if err = g.localConnector.startListen(); err != nil {
-		return errors.New("can not open local proxy")
-	}
 	g.localConnector.onData(func(data []byte) {
 		_, err = g.serveConnector.sendData(PackageTypeToHost, g.hostId, data)
 		if err != nil {
 			LOG.Error("can not send package ", err)
 		}
 	})
+	if err = g.localConnector.startListen(); err != nil {
+		return errors.New("can not open local proxy")
+	}
 	err = g.localConnector.startListenUdp(":"+strconv.Itoa(g.gameConfig.UdpPort), func(data []byte) {
 		_, err := g.serveConnector.sendData(PackageTypeBroadCast, g.hostId, data)
 		if err != nil {
@@ -73,7 +73,8 @@ func (g *Guest) ConnectServer() error {
 			g.BroadCastResponse(packet)
 		}
 	})
-	return g.serveConnector.waitAndForward()
+	go g.serveConnector.waitAndForward()
+	return g.openProxy()
 }
 
 func (g *Guest) resolveCommandFromServer(packet *Packet) {
@@ -115,4 +116,12 @@ func (g *Guest) Close() (err error) {
 	err = g.serveConnector.close()
 	err = g.localConnector.close()
 	return
+}
+
+func (g *Guest) ConnectionId() int {
+	return g.serveConnector.connectionId
+}
+
+func (g *Guest) SelectHost(hostId int) {
+	g.hostId = hostId
 }

@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -13,10 +14,11 @@ type Host struct {
 	gameConfig      *GameConfig
 }
 
-func NewHost(sAddr string) *Host {
+func NewHost(sAddr string, gameConfig *GameConfig) *Host {
 	return &Host{
 		serverConnector: NewServerConnector(sAddr),
 		localConnectors: make(map[int]net.Conn),
+		gameConfig:      gameConfig,
 	}
 }
 
@@ -114,7 +116,7 @@ func (h *Host) Close() (err error) {
 func (h *Host) forwardPackage(p *Packet) error {
 	conn := h.localConnectors[p.src]
 	if conn == nil {
-		if dial, err := net.Dial("tcp", "localhost:6112"); err != nil {
+		if dial, err := net.Dial("tcp", h.gameConfig.LocalIp+":"+strconv.Itoa(h.gameConfig.TcpPort)); err != nil {
 			return err
 		} else {
 			conn = dial
@@ -129,7 +131,11 @@ func (h *Host) forwardPackage(p *Packet) error {
 			buffer := make([]byte, 1000)
 			for {
 				if read, err := conn.Read(buffer); err != nil {
-					LOG.Error("error on read response", err)
+					if err == io.EOF {
+						continue
+					} else {
+						LOG.Error("error on read response", err)
+					}
 				} else {
 					h.serverConnector.sendData(PackageTypeToGuest, p.src, buffer[0:read])
 				}
@@ -140,4 +146,8 @@ func (h *Host) forwardPackage(p *Packet) error {
 	}
 	_, err := conn.Write(p.Data())
 	return err
+}
+
+func (h *Host) ConnectionId() int {
+	return h.serverConnector.connectionId
 }

@@ -19,9 +19,12 @@ func NewServerConnector(sAddr string) *ServerConnector {
 }
 
 func (s *ServerConnector) connect() error {
-	dial, err := net.Dial("tcp", s.sAddr)
-	s.sConn = dial
-	return err
+	if dial, err := net.Dial("tcp", s.sAddr); err != nil {
+		return err
+	} else {
+		s.sConn = dial
+		return nil
+	}
 }
 
 func (s *ServerConnector) waitAndForward() error {

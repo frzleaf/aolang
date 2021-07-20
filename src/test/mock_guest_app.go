@@ -34,6 +34,9 @@ func (h *MockGuestApp) broadCast(data []byte) error {
 
 func (h *MockGuestApp) connectToHost(hostAddr string) error {
 	dial, err := net.Dial("tcp", hostAddr+":"+strconv.Itoa(h.AppConfig.TcpPort))
+	if err != nil {
+		return err
+	}
 	h.host = dial
 	go func() {
 		for !h.stopped {

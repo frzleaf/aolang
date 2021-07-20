@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"io"
 	"log"
 	"net"
 )
@@ -94,7 +95,7 @@ func (s *Server) watchClient(id int) {
 	for {
 		read, err := conn.Read(buf)
 		if err != nil {
-			if err.Error() == "EOF" {
+			if err == io.EOF {
 				continue
 			}
 			LOG.Info("Close connection:", id)

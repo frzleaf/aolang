@@ -22,10 +22,14 @@ type Logger struct {
 }
 
 func NewLogger(out io.Writer) *Logger {
+	return NewLoggerWithLevel(out, InfoLevel)
+}
+
+func NewLoggerWithLevel(out io.Writer, logLevel int) *Logger {
 	return &Logger{
 		out:      out,
 		loggers:  make(map[int]*log.Logger),
-		logLevel: InfoLevel,
+		logLevel: logLevel,
 	}
 }
 
@@ -75,10 +79,10 @@ func (l *Logger) Info(args ...interface{})  { l.log(InfoLevel, "", args...) }
 func (l *Logger) Debug(args ...interface{}) { l.log(DebugLevel, "", args) }
 func (l *Logger) Trace(args ...interface{}) { l.log(TraceLevel, "", args) }
 
-func (l *Logger) Panicf(format string, args ...interface{}) { l.log(PanicLevel, format, args) }
-func (l *Logger) Fatalf(format string, args ...interface{}) { l.log(FatalLevel, format, args) }
-func (l *Logger) Errorf(format string, args ...interface{}) { l.log(ErrorLevel, format, args) }
-func (l *Logger) Warnf(format string, args ...interface{})  { l.log(WarnLevel, format, args) }
+func (l *Logger) Panicf(format string, args ...interface{}) { l.log(PanicLevel, format, args...) }
+func (l *Logger) Fatalf(format string, args ...interface{}) { l.log(FatalLevel, format, args...) }
+func (l *Logger) Errorf(format string, args ...interface{}) { l.log(ErrorLevel, format, args...) }
+func (l *Logger) Warnf(format string, args ...interface{})  { l.log(WarnLevel, format, args...) }
 func (l *Logger) Infof(format string, args ...interface{})  { l.log(InfoLevel, format, args...) }
-func (l *Logger) Debugf(format string, args ...interface{}) { l.log(DebugLevel, format, args) }
-func (l *Logger) Tracef(format string, args ...interface{}) { l.log(TraceLevel, format, args) }
+func (l *Logger) Debugf(format string, args ...interface{}) { l.log(DebugLevel, format, args...) }
+func (l *Logger) Tracef(format string, args ...interface{}) { l.log(TraceLevel, format, args...) }
