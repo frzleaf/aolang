@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -55,22 +56,22 @@ func (g *Guest) ConnectServer() error {
 	g.serverConnector.onPacket(func(packet *Packet) {
 		LOG.Debugf("Receive msg from %v len %v\n", packet.SrcAddr(), len(packet.Data()))
 
-		if packet.src == ServerConnectorID {
-			g.resolveCommandFromServer(packet)
-			return
-		}
-
 		switch packet.pkgType {
 		case PackageTypeConverse:
 			LOG.Infof("#%v: %v\n", packet.src, string(packet.Data()))
 		case PackageTypeInform:
-			g.resolveCommandFromServer(packet)
+			if packet.src == ServerConnectorID {
+				g.resolveCommandFromServer(packet)
+				return
+			}
 		case PackageTypeAppData:
 			if _, err := g.localConnector.sentBytes(packet.Data()); err != nil {
 				LOG.Error("error on write data to local")
 			}
 		case PackageTypeBroadCast:
 			g.BroadCastResponse(packet)
+		case PackageTypeClientStatus:
+			fmt.Println(string(packet.Data()))
 		}
 	})
 	go func() {
@@ -99,6 +100,7 @@ func (g *Guest) resolveCommandFromServer(packet *Packet) {
 			} else {
 				g.serverConnector.SetConnectionId(connectionId)
 				g.SelectTargetId(connectionId)
+				g.serverConnector.sendData(PackageTypeClientStatus, ServerConnectorID, []byte(ClientModeGuest))
 				LOG.Infof("Connection ID assigned: %v", connectionId)
 			}
 		}
@@ -108,7 +110,7 @@ func (g *Guest) resolveCommandFromServer(packet *Packet) {
 		}
 	case CommandDisconnected:
 		if len(split) > 1 {
-			if strconv.Itoa(g.hostId) == split[1] {
+			if g.OnMatch() && strconv.Itoa(g.hostId) == split[1] {
 				g.localConnector.Release()
 				LOG.Infof("Disconnect to host #%v", g.hostId)
 			}

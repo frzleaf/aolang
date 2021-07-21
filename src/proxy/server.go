@@ -1,21 +1,25 @@
 package proxy
 
 import (
+	"bytes"
 	"log"
 	"net"
+	"strconv"
 )
 
 type Server struct {
-	clients       map[int]net.Conn
-	clientCounter int
-	stopped       bool
+	clients        map[int]net.Conn
+	clientStatuses map[int]string
+	clientCounter  int
+	stopped        bool
 }
 
 func NewServer() *Server {
 	return &Server{
-		clientCounter: 1,
-		clients:       make(map[int]net.Conn),
-		stopped:       false,
+		clientCounter:  1,
+		clients:        make(map[int]net.Conn),
+		clientStatuses: make(map[int]string),
+		stopped:        false,
 	}
 }
 
@@ -78,6 +82,7 @@ func (s *Server) exit(id int) {
 		conn.Close()
 	}
 	delete(s.clients, id)
+	delete(s.clientStatuses, id)
 	for i := range s.clients {
 		s.informClientDisconnected(i, id)
 	}
@@ -88,6 +93,29 @@ func (s *Server) Close() {
 	for _, conn := range s.clients {
 		conn.Close()
 	}
+}
+
+func (s *Server) formClientStatuesAsBytes() []byte {
+	lineBytes := []byte(" - ")
+	newLineBytes := []byte("\n")
+	moreInforBytes := []byte("...")
+
+	buffer := bytes.NewBuffer(nil)
+	for id, status := range s.clientStatuses {
+		buffer.Write([]byte(strconv.Itoa(id)))
+
+		buffer.Write(lineBytes)
+
+		buffer.Write([]byte(status))
+
+		buffer.Write(newLineBytes)
+
+		if buffer.Len() >= 900 {
+			buffer.Write(moreInforBytes)
+			break
+		}
+	}
+	return buffer.Bytes()
 }
 
 func (s *Server) informClientDisconnected(srcId int, disconnectedId int) {
@@ -113,13 +141,29 @@ func (s *Server) watchClient(id int) {
 			if packet.src == packet.dst {
 				continue
 			}
-			err = s.sendToConnector(packet.pkgType, packet.src, packet.dst, packet.data)
-			if err != nil {
-				if err == NotFoundConnectorError {
-					s.informClientDisconnected(packet.src, packet.dst)
-					break
+			switch packet.pkgType {
+			case PackageTypeClientStatus:
+				if packet.DstAddr() == ServerConnectorID {
+					if len(packet.Data()) > 0 {
+						s2 := string(packet.Data())
+						// Max status len
+						if len(s2) > 128 {
+							s2 = s2[0:128]
+						}
+						s.clientStatuses[packet.src] = s2
+					} else {
+						s.sendToConnector(PackageTypeClientStatus, ServerConnectorID, packet.src, s.formClientStatuesAsBytes())
+					}
 				}
-				LOG.Error("error while sendInform", err)
+			default:
+				err = s.sendToConnector(packet.pkgType, packet.src, packet.dst, packet.data)
+				if err != nil {
+					if err == NotFoundConnectorError {
+						s.informClientDisconnected(packet.src, packet.dst)
+						break
+					}
+					LOG.Error("error while sendInform", err)
+				}
 			}
 		}
 	}

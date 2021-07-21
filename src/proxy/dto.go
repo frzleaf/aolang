@@ -9,7 +9,7 @@ const (
 	PackageTypeConverse
 	PackageTypeBroadCast
 	PackageTypeAppData
-	PackageTypeConnection
+	PackageTypeClientStatus
 )
 
 type Packet struct {

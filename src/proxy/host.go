@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -30,16 +31,16 @@ func (h *Host) ConnectServer() error {
 	h.serverConnector.onPacket(func(packet *Packet) {
 		LOG.Debugf("Receive msg from %v len %v\n", packet.SrcAddr(), len(packet.Data()))
 
-		if packet.src == ServerConnectorID {
-			h.resolveCommandFromServer(packet)
-			return
-		}
-
 		switch packet.pkgType {
 		case PackageTypeConverse:
 			LOG.Infof("#%v: %v\n", packet.src, string(packet.Data()))
 		case PackageTypeInform:
-			h.resolveCommandFromServer(packet)
+			if packet.src == ServerConnectorID {
+				h.resolveCommandFromServer(packet)
+				return
+			}
+		case PackageTypeClientStatus:
+			fmt.Println(string(packet.Data()))
 		case PackageTypeAppData:
 			if err := h.forwardPackage(packet); err != nil {
 				LOG.Error("can not forward to app", err)
@@ -75,6 +76,7 @@ func (h *Host) resolveCommandFromServer(packet *Packet) {
 			} else {
 				h.serverConnector.SetConnectionId(connectionId)
 				h.SelectTargetId(connectionId)
+				h.serverConnector.sendData(PackageTypeClientStatus, ServerConnectorID, []byte(ClientModeHost))
 				LOG.Infof("Connection ID assigned: %v", connectionId)
 			}
 		}

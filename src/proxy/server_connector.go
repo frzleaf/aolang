@@ -54,6 +54,9 @@ func (s *ServerConnector) onPacket(onDataFunc func(p *Packet)) {
 }
 
 func (s *ServerConnector) close() error {
+	if s.sConn == nil {
+		return nil
+	}
 	if err := s.sConn.Close(); err != nil {
 		return err
 	} else {
