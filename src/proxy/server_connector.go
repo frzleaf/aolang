@@ -3,6 +3,7 @@ package proxy
 import (
 	"errors"
 	"net"
+	"strings"
 )
 
 type ServerConnector struct {
@@ -18,13 +19,9 @@ func NewServerConnector(sAddr string) *ServerConnector {
 	}
 }
 
-func (s *ServerConnector) connect() error {
-	if dial, err := net.Dial("tcp", s.sAddr); err != nil {
-		return err
-	} else {
-		s.sConn = dial
-		return nil
-	}
+func (s *ServerConnector) connect() (err error) {
+	s.sConn, err = net.Dial("tcp", s.sAddr)
+	return
 }
 
 func (s *ServerConnector) waitAndForward() error {
@@ -67,4 +64,8 @@ func (s *ServerConnector) close() error {
 
 func (s *ServerConnector) SetConnectionId(connectionId int) {
 	s.connectionId = connectionId
+}
+
+func (s *ServerConnector) LocalAddr() string {
+	return strings.Split(s.sConn.LocalAddr().String(), ":")[0]
 }

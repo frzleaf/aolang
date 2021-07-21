@@ -12,6 +12,7 @@ type Host struct {
 	localConnectors map[int]net.Conn // connection id
 	monitor         *Monitor
 	gameConfig      *GameConfig
+	targetId        int
 }
 
 func NewHost(sAddr string, gameConfig *GameConfig) *Host {
@@ -35,15 +36,17 @@ func (h *Host) ConnectServer() error {
 		}
 
 		switch packet.pkgType {
+		case PackageTypeConverse:
+			LOG.Infof("#%v: %v\n", packet.src, string(packet.Data()))
 		case PackageTypeInform:
 			h.resolveCommandFromServer(packet)
-		case PackageTypeToHost:
+		case PackageTypeAppData:
 			if err := h.forwardPackage(packet); err != nil {
 				LOG.Error("can not forward to app", err)
 			}
 		case PackageTypeBroadCast:
 			if err := h.ResponseToBroadCast(packet, func(responseData []byte) {
-				if _, err := h.serverConnector.sendData(PackageTypeBroadCastResponse, packet.src, responseData); err != nil {
+				if _, err := h.serverConnector.sendData(PackageTypeBroadCast, packet.src, responseData); err != nil {
 					LOG.Error("can not send response broadcast", err)
 				}
 			}); err != nil {
@@ -71,6 +74,7 @@ func (h *Host) resolveCommandFromServer(packet *Packet) {
 				LOG.Error("Invalid connection ID: ", split[1])
 			} else {
 				h.serverConnector.SetConnectionId(connectionId)
+				h.SelectTargetId(connectionId)
 				LOG.Infof("Connection ID assigned: %v", connectionId)
 			}
 		}
@@ -78,13 +82,26 @@ func (h *Host) resolveCommandFromServer(packet *Packet) {
 		if err := h.Close(); err != nil {
 			LOG.Error("error on closing", err)
 		}
+	case CommandDisconnected:
+		if len(split) > 1 {
+			if guestId, err := strconv.Atoi(split[1]); err == nil {
+				if err := h.closeLocalConnection(guestId); err != nil {
+					LOG.Error("error on close local connection", err)
+				}
+			}
+		}
 	default:
 		LOG.Warn("Invalid command: ", serverCmd)
 	}
 }
 
 func (h *Host) ResponseToBroadCast(packet *Packet, onResponse func([]byte)) error {
-	conn, err := net.Dial("udp", "localhost:6112")
+	addr := &net.UDPAddr{
+		Port: 6112,
+		IP:   net.ParseIP(h.serverConnector.LocalAddr()),
+	}
+	net.DialUDP("udp", nil, addr)
+	conn, err := net.DialUDP("udp", nil, addr)
 	if err != nil {
 		return err
 	}
@@ -95,7 +112,7 @@ func (h *Host) ResponseToBroadCast(packet *Packet, onResponse func([]byte)) erro
 		defer conn.Close()
 		buffer := make([]byte, 1000)
 		if read, err := conn.Read(buffer); err != nil {
-			LOG.Error("can not read")
+			LOG.Error("can not read", err)
 		} else {
 			onResponse(buffer[0:read])
 		}
@@ -113,6 +130,14 @@ func (h *Host) Close() (err error) {
 	return
 }
 
+func (h *Host) closeLocalConnection(connectionId int) error {
+	if conn := h.localConnectors[connectionId]; conn != nil {
+		delete(h.localConnectors, connectionId)
+		return conn.Close()
+	}
+	return nil
+}
+
 func (h *Host) forwardPackage(p *Packet) error {
 	conn := h.localConnectors[p.src]
 	if conn == nil {
@@ -124,20 +149,20 @@ func (h *Host) forwardPackage(p *Packet) error {
 		go func() {
 			defer func() {
 				if h.localConnectors[p.src] == conn {
-					delete(h.localConnectors, p.src)
+					if err := h.closeLocalConnection(p.src); err != nil {
+						LOG.Error("error on closing local connection ", "#"+strconv.Itoa(p.src), err)
+					}
 				}
-				conn.Close()
 			}()
 			buffer := make([]byte, 1000)
 			for {
 				if read, err := conn.Read(buffer); err != nil {
-					if err == io.EOF {
-						continue
-					} else {
+					if err != io.EOF {
 						LOG.Error("error on read response", err)
 					}
+					return
 				} else {
-					h.serverConnector.sendData(PackageTypeToGuest, p.src, buffer[0:read])
+					h.serverConnector.sendData(PackageTypeAppData, p.src, buffer[0:read])
 				}
 			}
 		}()
@@ -150,4 +175,24 @@ func (h *Host) forwardPackage(p *Packet) error {
 
 func (h *Host) ConnectionId() int {
 	return h.serverConnector.connectionId
+}
+
+func (h *Host) SelectTargetId(targetId int) {
+	h.targetId = targetId
+}
+
+func (h *Host) TargetId() int {
+	return h.targetId
+}
+
+func (h *Host) ServerConnector() *ServerConnector {
+	return h.serverConnector
+}
+
+func (h *Host) GameConfig() *GameConfig {
+	return h.gameConfig
+}
+
+func (g *Host) OnMatch() bool {
+	return true
 }

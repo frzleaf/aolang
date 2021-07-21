@@ -5,12 +5,11 @@ import (
 )
 
 const (
-	PackageTypeSelect = iota
-	PackageTypeInform
+	PackageTypeInform = iota
+	PackageTypeConverse
 	PackageTypeBroadCast
-	PackageTypeBroadCastResponse
-	PackageTypeToHost
-	PackageTypeToGuest
+	PackageTypeAppData
+	PackageTypeConnection
 )
 
 type Packet struct {
@@ -49,14 +48,6 @@ func (p *Packet) ToBytes() []byte {
 	binary.BigEndian.PutUint32(res[12:16], uint32(p.dst))
 	copy(res[16:], p.data)
 	return res
-}
-
-func NewSelectPacket(src, dst int, data []byte) *Packet {
-	return NewPacket(PackageTypeSelect, src, dst, data)
-}
-
-func NewInformPacket(src, dst int, data []byte) *Packet {
-	return NewPacket(PackageTypeInform, src, dst, data)
 }
 
 func NewPacket(pkgType, src, dst int, data []byte) *Packet {

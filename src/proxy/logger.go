@@ -71,13 +71,13 @@ func (l *Logger) log(logLevel int, format string, args ...interface{}) {
 	}
 }
 
-func (l *Logger) Panic(args ...interface{}) { l.log(PanicLevel, "", args) }
-func (l *Logger) Fatal(args ...interface{}) { l.log(FatalLevel, "", args) }
-func (l *Logger) Error(args ...interface{}) { l.log(ErrorLevel, "", args) }
-func (l *Logger) Warn(args ...interface{})  { l.log(WarnLevel, "", args) }
+func (l *Logger) Panic(args ...interface{}) { l.log(PanicLevel, "", args...) }
+func (l *Logger) Fatal(args ...interface{}) { l.log(FatalLevel, "", args...) }
+func (l *Logger) Error(args ...interface{}) { l.log(ErrorLevel, "", args...) }
+func (l *Logger) Warn(args ...interface{})  { l.log(WarnLevel, "", args...) }
 func (l *Logger) Info(args ...interface{})  { l.log(InfoLevel, "", args...) }
-func (l *Logger) Debug(args ...interface{}) { l.log(DebugLevel, "", args) }
-func (l *Logger) Trace(args ...interface{}) { l.log(TraceLevel, "", args) }
+func (l *Logger) Debug(args ...interface{}) { l.log(DebugLevel, "", args...) }
+func (l *Logger) Trace(args ...interface{}) { l.log(TraceLevel, "", args...) }
 
 func (l *Logger) Panicf(format string, args ...interface{}) { l.log(PanicLevel, format, args...) }
 func (l *Logger) Fatalf(format string, args ...interface{}) { l.log(FatalLevel, format, args...) }

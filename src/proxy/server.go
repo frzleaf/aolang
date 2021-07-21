@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"io"
 	"log"
 	"net"
 )
@@ -79,6 +78,9 @@ func (s *Server) exit(id int) {
 		conn.Close()
 	}
 	delete(s.clients, id)
+	for i := range s.clients {
+		s.informClientDisconnected(i, id)
+	}
 }
 
 func (s *Server) Close() {
@@ -88,6 +90,15 @@ func (s *Server) Close() {
 	}
 }
 
+func (s *Server) informClientDisconnected(srcId int, disconnectedId int) {
+	s.sendToConnector(
+		PackageTypeInform,
+		ServerConnectorID,
+		srcId,
+		[]byte(CommandToString(CommandDisconnected, disconnectedId)),
+	)
+}
+
 func (s *Server) watchClient(id int) {
 	buf := make([]byte, 1000)
 	conn := s.clients[id]
@@ -95,22 +106,20 @@ func (s *Server) watchClient(id int) {
 	for {
 		read, err := conn.Read(buf)
 		if err != nil {
-			if err == io.EOF {
-				continue
-			}
 			LOG.Info("Close connection:", id)
 			return
 		}
 		for _, packet := range PacketFromBytes(buf[0:read]) {
-			switch packet.PacketType() {
-			case PackageTypeBroadCast:
-				LOG.Infof("Broadcast message size: %v", packet.Len())
-				s.broadCast(packet)
-			default:
-				err = s.sendToConnector(packet.pkgType, packet.src, packet.dst, packet.data)
-				if err != nil {
-					LOG.Error("error while sendInform", err)
+			if packet.src == packet.dst {
+				continue
+			}
+			err = s.sendToConnector(packet.pkgType, packet.src, packet.dst, packet.data)
+			if err != nil {
+				if err == NotFoundConnectorError {
+					s.informClientDisconnected(packet.src, packet.dst)
+					break
 				}
+				LOG.Error("error while sendInform", err)
 			}
 		}
 	}

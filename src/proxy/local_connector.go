@@ -2,17 +2,16 @@ package proxy
 
 import (
 	"errors"
-	"io"
 	"net"
-	"time"
 )
 
 type LocalConnector struct {
-	localAddr   string
-	gConn       net.Conn
-	gListener   net.Listener
-	udpListener net.Listener
-	onDataFunc  func([]byte)
+	localAddr  string
+	gConn      net.Conn
+	gListener  net.Listener
+	udpConn    *net.UDPConn
+	onDataFunc func([]byte)
+	isStopped  bool
 }
 
 func NewLocalConnector(localAddr string) *LocalConnector {
@@ -23,15 +22,14 @@ func NewLocalConnector(localAddr string) *LocalConnector {
 
 func (l *LocalConnector) close() (err error) {
 	if l.gConn != nil {
-		if err = l.gConn.Close(); err == nil {
-			l.gConn = nil
-		}
+		l.gConn.Close()
+		l.gConn = nil
 	}
 	if l.gListener != nil {
-		if err = l.gListener.Close(); err == nil {
-			l.gListener = nil
-		}
+		l.gListener.Close()
+		l.gListener = nil
 	}
+	l.isStopped = true
 	return
 }
 
@@ -43,10 +41,15 @@ func (l *LocalConnector) sentBytes(data []byte) (int, error) {
 	}
 }
 
-func (l *LocalConnector) sentBytesTo(data []byte, targetAddr string) (int, error) {
-	if dial, err := net.Dial("tcp", targetAddr); err != nil {
+func (l *LocalConnector) sentUdpBytesTo(data []byte, targetAddr string, port int) (int, error) {
+	addr := &net.UDPAddr{
+		Port: port,
+		IP:   net.ParseIP(targetAddr),
+	}
+	if dial, err := net.DialUDP("udp", nil, addr); err != nil {
 		return 0, err
 	} else {
+		defer dial.Close()
 		return dial.Write(data)
 	}
 }
@@ -55,54 +58,67 @@ func (l *LocalConnector) onData(onDataFunc func([]byte)) {
 	l.onDataFunc = onDataFunc
 }
 
-func (l *LocalConnector) startListen() error {
-	if l.gConn == nil {
-		listener, err := net.Listen("tcp", l.localAddr)
-		if err != nil {
+func (l *LocalConnector) startListen() (err error) {
+	l.gListener, err = net.Listen("tcp", l.localAddr)
+	if err != nil {
+		return err
+	}
+	defer l.gListener.Close()
+
+	// Only connection a time
+	for !l.isStopped {
+		if l.gConn, err = l.gListener.Accept(); err != nil {
 			return err
 		} else {
-			if l.gConn, err = listener.Accept(); err != nil {
-				return err
-			} else {
-				buffered := make([]byte, 1000)
-				for {
-					read, err := l.gConn.Read(buffered)
-					if err != nil {
-						if err == io.EOF {
-							time.Sleep(time.Millisecond * 100)
-							continue
-						} else {
-							break
-						}
-					}
-					l.onDataFunc(buffered[0:read])
+			buffered := make([]byte, 1000)
+			for l.gConn != nil {
+				read, err := l.gConn.Read(buffered)
+				if err != nil {
+					break
 				}
+				l.onDataFunc(buffered[0:read])
 			}
+			l.Release()
 		}
 	}
-	return errors.New("local connection is not empty")
+	return err
 }
 
-func (l *LocalConnector) startListenUdp(localUdpAddr string, onUdpFunc func(data []byte)) (err error) {
-	if l.udpListener, err = net.Listen("udp", localUdpAddr); err != nil {
+func (l *LocalConnector) startListenUdp(localAddr string, port int, onUdpFunc func(data []byte)) (err error) {
+	udpAddr := &net.UDPAddr{
+		Port: port,
+		IP:   net.ParseIP(localAddr),
+	}
+	if udpConn, err := net.ListenUDP("udp", udpAddr); err != nil {
 		return err
 	} else {
+		LOG.Debugf("Open udp listener at: %v", udpConn.LocalAddr())
 		go func() {
-			if accept, err := l.udpListener.Accept(); err != nil {
-				LOG.Error("listenUdp error", err)
-				return
-			} else {
-				buffered := make([]byte, 1000)
-				for {
-					read, err := accept.Read(buffered)
-					if err != nil || read == 0 {
-						accept.Close()
-						break
-					}
-					onUdpFunc(buffered[0:read])
+			defer udpConn.Close()
+			buffered := make([]byte, 1000)
+			for {
+				read, err := udpConn.Read(buffered)
+				if err != nil {
+					break
 				}
+				LOG.Debugf("Receive udp msg: %v\n", buffered[0:read])
+				onUdpFunc(buffered[0:read])
 			}
 		}()
 	}
 	return
+}
+
+func (l *LocalConnector) Release() error {
+	if l.gConn != nil {
+		if err := l.gConn.Close(); err != nil {
+			return errors.New("error on renewing: " + err.Error())
+		}
+		l.gConn = nil
+	}
+	return nil
+}
+
+func (l *LocalConnector) isOnline() bool {
+	return l.gConn != nil
 }

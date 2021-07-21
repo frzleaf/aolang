@@ -67,7 +67,7 @@ func TestIntegrate(t *testing.T) {
 			time.Sleep(time.Second)
 
 			// Open clients connect to host concurrently
-			for i := 0; i < 100; i++ {
+			for i := 0; i < 10; i++ {
 
 				guestConfig := &proxy.GameConfig{
 					TcpPort: 10100 + i,
