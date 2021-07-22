@@ -28,11 +28,14 @@ func (s *ServerConnector) waitAndForward() error {
 	if s.onPackageFunc == nil {
 		return errors.New("onPackageFunc not setup")
 	}
+
+	buff := make([]byte, 1000)
 	for s.sConn != nil {
-		buff := make([]byte, 1000)
 		if read, err := s.sConn.Read(buff); err != nil {
-			LOG.Error("error on reading server data", err)
-			s.close()
+			if s.sConn != nil {
+				LOG.Error("error on reading server data", err)
+				s.close()
+			}
 		} else {
 			for _, pkg := range PacketFromBytes(buff[0:read]) {
 				s.onPackageFunc(pkg)
@@ -53,16 +56,13 @@ func (s *ServerConnector) onPacket(onDataFunc func(p *Packet)) {
 	s.onPackageFunc = onDataFunc
 }
 
-func (s *ServerConnector) close() error {
+func (s *ServerConnector) close() (err error) {
 	if s.sConn == nil {
 		return nil
 	}
-	if err := s.sConn.Close(); err != nil {
-		return err
-	} else {
-		s.sConn = nil
-		return nil
-	}
+	conn := s.sConn
+	s.sConn = nil
+	return conn.Close()
 }
 
 func (s *ServerConnector) SetConnectionId(connectionId int) {

@@ -9,11 +9,12 @@ import (
 )
 
 type Host struct {
-	serverConnector *ServerConnector // guestId player connection
-	localConnectors map[int]net.Conn // connection id
-	monitor         *Monitor
-	gameConfig      *GameConfig
-	targetId        int
+	serverConnector    *ServerConnector // guestId player connection
+	localConnectors    map[int]net.Conn // connection id
+	monitor            *Monitor
+	gameConfig         *GameConfig
+	targetId           int
+	connectSuccessFunc func(client Client)
 }
 
 func NewHost(sAddr string, gameConfig *GameConfig) *Host {
@@ -55,6 +56,9 @@ func (h *Host) ConnectServer() error {
 			}
 		}
 	})
+	if h.connectSuccessFunc != nil {
+		go h.connectSuccessFunc(h)
+	}
 	return h.serverConnector.waitAndForward()
 }
 
@@ -195,6 +199,10 @@ func (h *Host) GameConfig() *GameConfig {
 	return h.gameConfig
 }
 
-func (g *Host) OnMatch() bool {
+func (h *Host) OnMatch() bool {
 	return true
+}
+
+func (h *Host) OnConnectSuccess(connectFunc func(client Client)) {
+	h.connectSuccessFunc = connectFunc
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"proxy"
 	"strings"
@@ -13,26 +12,42 @@ const LANCraftVersion = "0.3"
 
 func main() {
 	fmt.Println(getBanner())
-	// Default setting
-	serverAddr := ""
-	mode := proxy.ClientModeGuest
-
 	controller := proxy.NewController()
 
-	if len(os.Args) > 1 {
-		serverAddr = os.Args[1]
+	client := clientByPrompt(true)
+
+	for !controller.IsStop() {
+		client.OnConnectSuccess(func(c proxy.Client) {
+			controller.InteractOnClient(c)
+		})
+		if err := client.ConnectServer(); err != nil {
+			fmt.Println("Lỗi kết nối server, vui lòng thử lại...")
+			proxy.LOG.Debug(err)
+			client = clientByPrompt(false)
+		}
+		client.Close()
 	}
-	if len(os.Args) > 2 {
-		modeArg := strings.ToLower(strings.TrimSpace(os.Args[2]))
-		if modeArg == proxy.ClientModeHost {
-			mode = modeArg
+}
+
+func clientByPrompt(fromArgs bool) proxy.Client {
+
+	var serverAddr, mode string
+	if fromArgs {
+		if len(os.Args) > 1 {
+			serverAddr = os.Args[1]
+		}
+		if len(os.Args) > 2 {
+			mode = strings.ToLower(strings.TrimSpace(os.Args[2]))
 		}
 	}
-	if len(os.Args) == 1 {
-		serverAddr = readFromStdin("Vui lòng nhập server (vd: lancraft.net:9999) - ")
-		promptMode := readFromStdin("Mode (guest/host) - ")
-		mode = filterMode(promptMode)
+
+	if serverAddr == "" {
+		serverAddr = readLineFromStdin("Vui lòng nhập server (vd: lancraft.net:9999) - ")
 	}
+	if mode == "" {
+		mode = readLineFromStdin("Mode (vd: guest, host) - ")
+	}
+	mode = filterMode(mode)
 
 	var client proxy.Client
 	switch mode {
@@ -42,26 +57,28 @@ func main() {
 		client = proxy.NewGuest(serverAddr, proxy.Warcraft3Config)
 	}
 
-	go controller.InteractOnClient(client)
 	fmt.Printf(`
------------------- Thông tin cài đặt ------------------
-   			Server 		 	 : %v
-   			Mode   		 	 : %v
-			Lancraft version : %v
--------------------------------------------------------
+_______________________ Thông tin cài đặt _______________________
+
+                         Server: %v
+                           Mode: %v
+_________________________________________________________________
+
 `,
-		serverAddr, mode, LANCraftVersion)
-	if err := client.ConnectServer(); err != nil {
-		log.Fatalln(err)
-	}
+		serverAddr, mode)
+	return client
 }
 
-func readFromStdin(promptInput string) (result string) {
+func readFromStdin(promptInput string, delim byte) (result string) {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print(promptInput)
-	result, _ = reader.ReadString('\n')
+	result, _ = reader.ReadString(delim)
 	result = strings.TrimSpace(result)
 	return
+}
+
+func readLineFromStdin(promptInput string) (result string) {
+	return readFromStdin(promptInput, '\n')
 }
 
 func filterMode(inputMode string) string {
@@ -75,12 +92,14 @@ func filterMode(inputMode string) string {
 }
 
 func getBanner() string {
-	return `
+	return fmt.Sprintf(`
 ██╗      █████╗ ███╗   ██╗ ██████╗██████╗  █████╗ ███████╗████████╗
 ██║     ██╔══██╗████╗  ██║██╔════╝██╔══██╗██╔══██╗██╔════╝╚══██╔══╝
 ██║     ███████║██╔██╗ ██║██║     ██████╔╝███████║█████╗     ██║   
 ██║     ██╔══██║██║╚██╗██║██║     ██╔══██╗██╔══██║██╔══╝     ██║   
 ███████╗██║  ██║██║ ╚████║╚██████╗██║  ██║██║  ██║██║        ██║   
 ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝        ╚═╝
-`
+                           version %v
+              (https://github.com/frzleaf/lancraft)
+`, LANCraftVersion)
 }

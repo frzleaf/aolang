@@ -20,20 +20,30 @@ const (
 	CmdPrefixHelp      = "/"
 )
 
+const (
+	ControllerStatusIdle = iota
+	ControllerStatusInteracting
+	ControllerStatusStop
+)
+
 // Controller handle user interacting
 type Controller struct {
-	autoPing bool
+	pinging bool
+	status  int
 }
 
 func NewController() *Controller {
-	return &Controller{}
+	return &Controller{
+		status:  ControllerStatusIdle,
+		pinging: false,
+	}
 }
 
-func (s *Controller) BroadCast(client Client) (err error) {
-	if s.autoPing {
+func (c *Controller) BroadCast(client Client) (err error) {
+	if c.pinging {
 		return
 	}
-	s.autoPing = true
+	c.pinging = true
 	addr := &net.UDPAddr{
 		Port: client.GameConfig().UdpPort,
 		IP:   net.ParseIP(client.ServerConnector().LocalAddr()),
@@ -43,9 +53,9 @@ func (s *Controller) BroadCast(client Client) (err error) {
 	} else {
 		go func() {
 			defer func() {
-				s.autoPing = false
+				c.pinging = false
 			}()
-			for s.autoPing {
+			for c.pinging {
 				for i := 0; i < 2 && !client.OnMatch(); i++ {
 					if _, err2 := udp.Write(
 						[]byte{0xf7, 0x2f, 0x10, 0x00, 0x50, 0x58, 0x33, 0x57, 0x18, 0x00, 0x00, 0x00, byte(i), 0x00, 0x00, 0x00},
@@ -60,9 +70,14 @@ func (s *Controller) BroadCast(client Client) (err error) {
 	return nil
 }
 
-func (s *Controller) InteractOnClient(client Client) {
-	s.printListCmd()
-	for {
+func (c *Controller) InteractOnClient(client Client) {
+	if c.status != ControllerStatusIdle {
+		LOG.Error("can not interact")
+		return
+	}
+	c.printListCmd()
+	c.ChangeStatus(ControllerStatusInteracting)
+	for c.status == ControllerStatusInteracting {
 		reader := bufio.NewReader(os.Stdin)
 		line, _, err := reader.ReadLine()
 		if err != nil {
@@ -88,17 +103,19 @@ func (s *Controller) InteractOnClient(client Client) {
 			case CmdPrefixFind, CmdPrefixFindShort:
 				client.ServerConnector().sendData(PackageTypeClientStatus, ServerConnectorID, nil)
 			case CmdPrefixExit:
+				c.StopInteract()
+				c.ChangeStatus(ControllerStatusStop)
 				client.Close()
 			case CmdPrefixPing, CmdPrefixPingShort:
-				if s.autoPing {
-					s.autoPing = false
+				if c.pinging {
+					c.pinging = false
 				} else {
-					if err := s.BroadCast(client); err != nil {
+					if err := c.BroadCast(client); err != nil {
 						LOG.Error("ping error", err)
 					}
 				}
 			case CmdPrefixHelp:
-				s.printListCmd()
+				c.printListCmd()
 			default:
 				if _, err = client.ServerConnector().sendData(PackageTypeConverse, client.TargetId(), line); err != nil {
 					LOG.Error(err)
@@ -108,17 +125,35 @@ func (s *Controller) InteractOnClient(client Client) {
 	}
 }
 
-func (s *Controller) printListCmd() {
-	fmt.Printf(`
-____________________ Danh sách các lệnh __________________________
+func (c *Controller) StopInteract() {
+	c.ChangeStatus(ControllerStatusIdle)
+	c.pinging = false
+}
 
-- %v <hostId>: kết nối tới host (tìm <hostId> bằng lệnh %v)
-- %v (%v): tìm kiếm các client cùng server
-- %v: thoát game
-- %v (%v): ping (bật/tắt tự động tìm kiếm nếu không thấy host)
-- %v: tra cứu lệnh
-__________________________________________________________________
+func (c *Controller) ChangeStatus(newStatus int) {
+	if c.status == ControllerStatusStop {
+		return
+	}
+	c.status = newStatus
+}
+
+func (c *Controller) IsStop() bool {
+	return c.status == ControllerStatusStop
+}
+
+func (c *Controller) printListCmd() {
+	fmt.Printf(`
+ Danh sách các lệnh:
+   - %-12s: kết nối tới host (tìm <hostId> bằng lệnh %v)
+   - %-12s: tìm kiếm các client cùng server
+   - %-12s: thoát game
+   - %-12s: bật/tắt tự động tìm kiếm nếu không thấy host
+   - %-12s: tra cứu lệnh
 `,
-		CmdPrefixTo, CmdPrefixFind, CmdPrefixFind, CmdPrefixFindShort, CmdPrefixExit, CmdPrefixPing, CmdPrefixPingShort, CmdPrefixHelp,
+		CmdPrefixTo+" <hostId>", CmdPrefixFind,
+		CmdPrefixFind+"("+CmdPrefixFindShort+")",
+		CmdPrefixExit,
+		CmdPrefixPing+"("+CmdPrefixPingShort+")",
+		CmdPrefixHelp,
 	)
 }

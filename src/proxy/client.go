@@ -11,4 +11,5 @@ type Client interface {
 	OnMatch() bool
 	ConnectServer() error
 	Close() error
+	OnConnectSuccess(func(client Client))
 }

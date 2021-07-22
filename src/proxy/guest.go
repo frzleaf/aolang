@@ -7,11 +7,12 @@ import (
 )
 
 type Guest struct {
-	serverConnector *ServerConnector // guestId player connection
-	localConnector  *LocalConnector  // connection id
-	hostId          int              // connection id
-	monitor         *Monitor
-	gameConfig      *GameConfig
+	serverConnector    *ServerConnector // guestId player connection
+	localConnector     *LocalConnector  // connection id
+	hostId             int              // connection id
+	monitor            *Monitor
+	gameConfig         *GameConfig
+	connectSuccessFunc func(client Client)
 }
 
 func NewGuest(sAddr string, config *GameConfig) (g *Guest) {
@@ -79,6 +80,9 @@ func (g *Guest) ConnectServer() error {
 			LOG.Error("error on openProxy", err)
 		}
 	}()
+	if g.connectSuccessFunc != nil {
+		go g.connectSuccessFunc(g)
+	}
 	return g.serverConnector.waitAndForward()
 }
 
@@ -158,4 +162,8 @@ func (g *Guest) GameConfig() *GameConfig {
 
 func (g *Guest) OnMatch() bool {
 	return g.localConnector.isOnline()
+}
+
+func (g *Guest) OnConnectSuccess(connectFunc func(client Client)) {
+	g.connectSuccessFunc = connectFunc
 }
