@@ -40,7 +40,7 @@ func (h *MockGuestApp) connectToHost(hostAddr string) error {
 	h.host = dial
 	go func() {
 		for !h.stopped {
-			buf := make([]byte, 1000)
+			buf := proxy.CreateBuffer()
 			if read, err2 := h.host.Read(buf); err2 != nil {
 				return
 			} else {

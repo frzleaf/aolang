@@ -41,6 +41,8 @@ hoặc build từ file ```src/main/proxy_client.go```
 
 
 ## II. Các game hỗ trợ
+
 ### 1. Warcraft
 Các phiên bản warcraft đã thử nghiệm: 1.24e
-### 2. AOE (sắp tới)
+
+###2. AOE (sắp tới)

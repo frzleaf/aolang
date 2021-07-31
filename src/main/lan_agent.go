@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"proxy"
 	"strconv"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ func watchAndForward(lAddr, rAddr string) {
 	}
 
 	defer scannerConn.Close()
-	buf := make([]byte, 1000)
+	buf := proxy.CreateBuffer()
 	var scanCounter byte = 0
 
 	joinedGame := false
@@ -131,8 +132,8 @@ func intermediate(tcpConn net.Conn, rTcpAddr net.TCPAddr, onExit func()) {
 		log.Fatal(err)
 	}
 
-	buf1 := make([]byte, 1000)
-	buf2 := make([]byte, 1000)
+	buf1 := proxy.CreateBuffer()
+	buf2 := proxy.CreateBuffer()
 
 	go func() {
 		defer tcpConn.Close()

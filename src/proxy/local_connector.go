@@ -63,6 +63,10 @@ func (l *LocalConnector) startListen() (err error) {
 	if err != nil {
 		return err
 	}
+
+	LOG.Debug("Proxy listen on: ", l.localAddr)
+	defer l.gListener.Close()
+
 	defer l.gListener.Close()
 
 	// Only connection a time
@@ -70,7 +74,7 @@ func (l *LocalConnector) startListen() (err error) {
 		if l.gConn, err = l.gListener.Accept(); err != nil {
 			return err
 		} else {
-			buffered := make([]byte, 1000)
+			buffered := CreateBuffer()
 			for l.gConn != nil {
 				read, err := l.gConn.Read(buffered)
 				if err != nil {
@@ -95,7 +99,7 @@ func (l *LocalConnector) startListenUdp(localAddr string, port int, onUdpFunc fu
 		LOG.Debugf("Open udp listener at: %v", udpConn.LocalAddr())
 		go func() {
 			defer udpConn.Close()
-			buffered := make([]byte, 1000)
+			buffered := CreateBuffer()
 			for {
 				read, err := udpConn.Read(buffered)
 				if err != nil {

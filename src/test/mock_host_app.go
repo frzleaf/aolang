@@ -38,7 +38,7 @@ func (h *MockHostApp) listenUdp() error {
 
 	go func() {
 		defer listener.Close()
-		buf := make([]byte, 1000)
+		buf := proxy.CreateBuffer()
 		for !h.stopped {
 			if read, err2 := listener.Read(buf); err2 != nil {
 				return
@@ -58,7 +58,7 @@ func (h *MockHostApp) onNewClient(conn net.Conn) {
 	h.guests[currentCounter] = conn
 	go func() {
 		defer conn.Close()
-		buf := make([]byte, 1000)
+		buf := proxy.CreateBuffer()
 		for !h.stopped {
 			if read, err := conn.Read(buf); err != nil {
 				if err == io.EOF {

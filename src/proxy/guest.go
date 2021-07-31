@@ -67,7 +67,7 @@ func (g *Guest) ConnectServer() error {
 			}
 		case PackageTypeAppData:
 			if _, err := g.localConnector.sentBytes(packet.Data()); err != nil {
-				LOG.Error("error on write data to local")
+				LOG.Error("error on write data to local", err)
 			}
 		case PackageTypeBroadCast:
 			g.BroadCastResponse(packet)
@@ -103,7 +103,6 @@ func (g *Guest) resolveCommandFromServer(packet *Packet) {
 				LOG.Error("Invalid connection ID: ", split[1])
 			} else {
 				g.serverConnector.SetConnectionId(connectionId)
-				g.SelectTargetId(connectionId)
 				g.serverConnector.sendData(PackageTypeClientStatus, ServerConnectorID, []byte(ClientModeGuest))
 				LOG.Infof("Connection ID assigned: %v", connectionId)
 			}
@@ -138,10 +137,6 @@ func (g *Guest) Close() (err error) {
 
 func (g *Guest) ConnectionId() int {
 	return g.serverConnector.connectionId
-}
-
-func (g *Guest) SelectHost(hostId int) {
-	g.hostId = hostId
 }
 
 func (g *Guest) ServerConnector() *ServerConnector {

@@ -29,7 +29,8 @@ func (s *ServerConnector) waitAndForward() error {
 		return errors.New("onPackageFunc not setup")
 	}
 
-	buff := make([]byte, 1000)
+	buff := CreateBuffer()
+	packageStream := PackageStream{}
 	for s.sConn != nil {
 		if read, err := s.sConn.Read(buff); err != nil {
 			if s.sConn != nil {
@@ -37,7 +38,8 @@ func (s *ServerConnector) waitAndForward() error {
 				s.close()
 			}
 		} else {
-			for _, pkg := range PacketFromBytes(buff[0:read]) {
+			_, packets := packageStream.PacketFromBytes(buff[0:read])
+			for _, pkg := range packets {
 				s.onPackageFunc(pkg)
 			}
 		}

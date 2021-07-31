@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/binary"
 )
 
@@ -61,22 +62,51 @@ func NewPacket(pkgType, src, dst int, data []byte) *Packet {
 	}
 }
 
-func PacketFromBytes(data []byte) (result []*Packet) {
+type PackageStream struct {
+	remaining bytes.Buffer
+}
+
+func (s *PackageStream) PacketFromBytes(data []byte) (isRemain bool, result []*Packet) {
+	var packageData []byte
+	if s.remaining.Len() != 0 {
+		packageData = make([]byte, s.remaining.Len()+len(data))
+		copy(packageData, s.remaining.Bytes())
+		copy(packageData[s.remaining.Len():], data)
+		s.remaining.Reset()
+	} else {
+		packageData = data
+	}
+	read, packets := FullPacketFromBytes(packageData)
+	if read < len(packageData) {
+		s.remaining.Write(packageData[read:])
+		isRemain = true
+	} else {
+		isRemain = false
+	}
+	return isRemain, packets
+}
+
+func CreateBuffer() []byte {
+	return make([]byte, 5000)
+}
+
+func FullPacketFromBytes(data []byte) (read int, result []*Packet) {
 	result = make([]*Packet, 0)
 	if data == nil {
 		return
 	}
-	read := 0
-	for read < len(data)-4 {
+	max := len(data)
+	read = 0
+	for read < max-4 {
 		size := int(binary.BigEndian.Uint32(data[read : read+4]))
 		endBytes := size + read
-		if endBytes > len(data) {
-			endBytes = len(data)
+		if endBytes > max {
+			break
 		}
 		result = append(result, singlePacketFromBytes(data[read:endBytes]))
 		read = read + size
 	}
-	return result
+	return
 }
 
 func singlePacketFromBytes(data []byte) *Packet {

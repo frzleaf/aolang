@@ -128,16 +128,18 @@ func (s *Server) informClientDisconnected(srcId int, disconnectedId int) {
 }
 
 func (s *Server) watchClient(id int) {
-	buf := make([]byte, 1000)
+	buf := CreateBuffer()
 	conn := s.clients[id]
 	defer s.exit(id)
+	packageStream := PackageStream{}
 	for {
 		read, err := conn.Read(buf)
 		if err != nil {
 			LOG.Info("Close connection:", id)
 			return
 		}
-		for _, packet := range PacketFromBytes(buf[0:read]) {
+		_, packets := packageStream.PacketFromBytes(buf[0:read])
+		for _, packet := range packets {
 			if packet.src == packet.dst {
 				continue
 			}
@@ -158,6 +160,7 @@ func (s *Server) watchClient(id int) {
 			default:
 				err = s.sendToConnector(packet.pkgType, packet.src, packet.dst, packet.data)
 				if err != nil {
+					LOG.Error("serrver error", err)
 					if err == NotFoundConnectorError {
 						s.informClientDisconnected(packet.src, packet.dst)
 						break

@@ -7,13 +7,14 @@ import (
 	"proxy"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
 var serverAddr = "localhost:9999"
 var server = proxy.NewServer()
-var SendStr = "123456"
+var SendStr = ""
 var LOG *proxy.Logger
 
 var configWithUdp = &proxy.GameConfig{
@@ -33,14 +34,23 @@ func init() {
 	go func() {
 		server.Start(serverAddr)
 	}()
+	initSendStr(4800)
+}
+
+func initSendStr(size int) {
+	var sb strings.Builder
+	for i := 0; i < size; i++ {
+		sb.WriteByte(byte(i%89 + 33)) // ensure text character
+	}
+	SendStr = sb.String()
 }
 
 func TestIntegrate(t *testing.T) {
 	t.Run(
-		"testIntegrate",
+		"test interacting via proxy",
 		func(t *testing.T) {
 			host := proxy.NewHost(serverAddr, hostConfig)
-
+			var mainLock sync.WaitGroup
 			go func() {
 				if err := host.ConnectServer(); err != nil {
 					t.Error(err)
@@ -64,16 +74,23 @@ func TestIntegrate(t *testing.T) {
 				})
 				defer hostApp.close()
 			}
+			// Wait for host online
 			time.Sleep(time.Second)
 
 			// Open clients connect to host concurrently
 			for i := 0; i < 10; i++ {
+				mainLock.Add(1)
 
 				guestConfig := &proxy.GameConfig{
 					TcpPort: 10100 + i,
 					LocalIp: "0.0.0.0",
 				}
 				guest := proxy.NewGuest(serverAddr, guestConfig)
+
+				guest.OnConnectSuccess(func(client proxy.Client) {
+					client.SelectTargetId(host.ConnectionId())
+				})
+
 				go func() {
 					if err := guest.ConnectServer(); err != nil {
 						t.Error(err)
@@ -82,15 +99,17 @@ func TestIntegrate(t *testing.T) {
 						defer guest.Close()
 					}
 				}()
-				guest.SelectHost(host.ConnectionId())
 
 				go func() {
+					var subLock sync.WaitGroup
+
 					guestApp := NewMockGuestApp(guestConfig)
 					if err := guestApp.connectToHost("localhost"); err != nil {
 						t.Error(err)
 						t.FailNow()
 					} else {
 						guestApp.OnHostReply(func(data []byte) {
+							defer subLock.Done()
 							LOG.Debugf("Receive message from host: %v\n", string(data))
 							receivedStr := string(data)
 							expectedResult := strconv.Itoa(len(SendStr))
@@ -101,14 +120,17 @@ func TestIntegrate(t *testing.T) {
 						defer guestApp.close()
 					}
 					for j := 0; j < 5; j++ {
+						subLock.Add(1)
 						if err := guestApp.sendDataToHost([]byte(SendStr)); err != nil {
 							t.Error(err)
 						}
-						time.Sleep(time.Millisecond * 300)
+						time.Sleep(time.Millisecond * 50)
 					}
+					subLock.Wait()
+					mainLock.Done()
 				}()
 			}
-			time.Sleep(time.Second * 5)
+			mainLock.Wait()
 		},
 	)
 
@@ -122,12 +144,12 @@ func TestServer(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			buf := make([]byte, 1000)
+			buf := proxy.CreateBuffer()
 			read, err := dial.Read(buf)
 			if err != nil {
 				t.Error(err)
 			}
-			packages := proxy.PacketFromBytes(buf[0:read])
+			_, packages := proxy.FullPacketFromBytes(buf[0:read])
 			if len(packages) == 0 {
 				t.Error("no package found")
 			}
@@ -168,6 +190,8 @@ func TestMockApp(t *testing.T) {
 			host := NewMockHostApp(configWithUdp)
 			guest := NewMockGuestApp(configWithUdp)
 
+			var lock sync.WaitGroup
+
 			if err := host.listen(); err != nil {
 				t.Error(err)
 				t.FailNow()
@@ -182,36 +206,37 @@ func TestMockApp(t *testing.T) {
 			}
 
 			host.OnData(func(bytes []byte, guestId int) {
+				LOG.Debugf("Receive message from #%v: %v\n", guestId, string(bytes))
+
 				receivedStr := string(bytes)
 				if receivedStr != SendStr {
 					t.Error("received message not as expected", receivedStr, SendStr)
 				}
-				host.sendData([]byte(strconv.Itoa(len(bytes))), guestId)
+				if err := host.sendData([]byte(strconv.Itoa(len(bytes))), guestId); err != nil {
+					t.Error(err)
+					t.FailNow()
+				}
 			})
 
 			guest.OnHostReply(func(bytes []byte) {
+				LOG.Debugf("Receive message from host: %v\n", string(bytes))
+
 				sendStrLen := strconv.Itoa(len(SendStr))
 				if string(bytes) != sendStrLen {
 					t.Error("received message not as expected", string(bytes), sendStrLen)
 				}
+				lock.Done()
 			})
 
-			if err := guest.sendDataToHost([]byte(SendStr)); err != nil {
-				t.Error(err)
-			} else {
-				time.Sleep(time.Millisecond * 100)
-				err = guest.sendDataToHost([]byte(SendStr))
-				time.Sleep(time.Millisecond * 100)
-				err = guest.sendDataToHost([]byte(SendStr))
-				time.Sleep(time.Millisecond * 100)
-				err = guest.sendDataToHost([]byte(SendStr))
-				time.Sleep(time.Millisecond * 100)
-				err = guest.sendDataToHost([]byte(SendStr))
-				if err != nil {
+			for i := 0; i < 10; i++ {
+				lock.Add(1)
+				if err := guest.sendDataToHost([]byte(SendStr)); err != nil {
 					t.Error(err)
+					t.FailNow()
 				}
+				time.Sleep(time.Millisecond * 100)
 			}
-			time.Sleep(time.Second * 3)
+			lock.Wait()
 		},
 	)
 }

@@ -116,7 +116,7 @@ func (h *Host) ResponseToBroadCast(packet *Packet, onResponse func([]byte)) erro
 	}
 	go func() {
 		defer conn.Close()
-		buffer := make([]byte, 1000)
+		buffer := CreateBuffer()
 		if read, err := conn.Read(buffer); err != nil {
 			LOG.Error("can not read", err)
 		} else {
@@ -160,7 +160,7 @@ func (h *Host) forwardPackage(p *Packet) error {
 					}
 				}
 			}()
-			buffer := make([]byte, 1000)
+			buffer := CreateBuffer()
 			for {
 				if read, err := conn.Read(buffer); err != nil {
 					if err != io.EOF {
