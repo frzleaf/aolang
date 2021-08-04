@@ -69,20 +69,27 @@ func (l *LocalConnector) startListen() (err error) {
 
 	defer l.gListener.Close()
 
-	// Only connection a time
 	for !l.isStopped {
-		if l.gConn, err = l.gListener.Accept(); err != nil {
+		if conn, err := l.gListener.Accept(); err != nil {
 			return err
 		} else {
-			buffered := CreateBuffer()
-			for l.gConn != nil {
-				read, err := l.gConn.Read(buffered)
-				if err != nil {
-					break
-				}
-				l.onDataFunc(buffered[0:read])
+			// Accept only one connection a time
+			if l.gConn != nil {
+				conn.Close()
+				continue
 			}
-			l.Release()
+			l.gConn = conn
+			go func() {
+				buffered := CreateBuffer()
+				for l.gConn != nil {
+					read, err := l.gConn.Read(buffered)
+					if err != nil {
+						break
+					}
+					l.onDataFunc(buffered[0:read])
+				}
+				l.Release()
+			}()
 		}
 	}
 	return err
