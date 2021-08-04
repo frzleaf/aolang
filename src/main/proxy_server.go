@@ -12,7 +12,7 @@ func main() {
 	if len(os.Args) > 1 {
 		server.Start(os.Args[1])
 	} else {
-		log.Fatalln("Please run with args, example: lancraft_server 0.0.0.0:9999")
+		log.Fatalln("Please run with args, example: aolang_server 0.0.0.0:9999")
 	}
 
 }

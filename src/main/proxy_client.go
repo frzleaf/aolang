@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const LANCraftVersion = "0.3"
+const AolangVersion = "0.3.1"
 
 func main() {
 	fmt.Println(getBanner())
@@ -42,7 +42,7 @@ func clientByPrompt(fromArgs bool) proxy.Client {
 	}
 
 	if serverAddr == "" {
-		serverAddr = readLineFromStdin("Vui lòng nhập server (vd: lancraft.net:9999) - ")
+		serverAddr = readLineFromStdin("Vui lòng nhập server (vd: aolang.net:9999) - ")
 	}
 	if mode == "" {
 		mode = readLineFromStdin("Mode (vd: guest, host) - ")
@@ -58,11 +58,11 @@ func clientByPrompt(fromArgs bool) proxy.Client {
 	}
 
 	fmt.Printf(`
-_______________________ Thông tin cài đặt _______________________
+__________________ Thông tin cài đặt __________________
 
-                         Server: %v
-                           Mode: %v
-_________________________________________________________________
+                     Server: %v
+                       Mode: %v
+_______________________________________________________
 
 `,
 		serverAddr, mode)
@@ -93,13 +93,13 @@ func filterMode(inputMode string) string {
 
 func getBanner() string {
 	return fmt.Sprintf(`
-██╗      █████╗ ███╗   ██╗ ██████╗██████╗  █████╗ ███████╗████████╗
-██║     ██╔══██╗████╗  ██║██╔════╝██╔══██╗██╔══██╗██╔════╝╚══██╔══╝
-██║     ███████║██╔██╗ ██║██║     ██████╔╝███████║█████╗     ██║   
-██║     ██╔══██║██║╚██╗██║██║     ██╔══██╗██╔══██║██╔══╝     ██║   
-███████╗██║  ██║██║ ╚████║╚██████╗██║  ██║██║  ██║██║        ██║   
-╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝        ╚═╝
-                           version %v
-              (https://github.com/frzleaf/lancraft)
-`, LANCraftVersion)
+ █████╗  ██████╗     ██╗      █████╗ ███╗   ██╗ ██████╗ 
+██╔══██╗██╔═══██╗    ██║     ██╔══██╗████╗  ██║██╔════╝ 
+███████║██║   ██║    ██║     ███████║██╔██╗ ██║██║  ███╗
+██╔══██║██║   ██║    ██║     ██╔══██║██║╚██╗██║██║   ██║
+██║  ██║╚██████╔╝    ███████╗██║  ██║██║ ╚████║╚██████╔╝
+╚═╝  ╚═╝ ╚═════╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝ 
+                     version %v
+          (https://github.com/frzleaf/aolang)
+`, AolangVersion)
 }
