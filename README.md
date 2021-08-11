@@ -32,6 +32,10 @@ go build -o build/aolang_server src/main/proxy_server.go
 Vào mục [release](https://github.com/frzleaf/aolang/releases) để tìm bản hỗ trợ cho máy của bạn
 hoặc build từ file ```src/main/proxy_client.go```
 
+Chi tiết cách sử dụng bạn có thể tham khảo qua [clip](https://youtu.be/KO7auRQMfS8):
+
+[![Hướng dẫn chơi Warcraft III online đơn giản](http://img.youtube.com/vi/KO7auRQMfS8/hqdefault.jpg)](https://youtu.be/KO7auRQMfS8)
+
 
 ## II. Các game hỗ trợ
 
