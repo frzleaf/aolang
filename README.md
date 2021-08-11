@@ -24,6 +24,9 @@ cd aolang
 export GOPATH=$GOPATH:$PWD
 # set GOPATH=%GOPATH%;%cd%         # for Windows environment
 go build -o build/aolang_server src/main/proxy_server.go
+
+// Run TCP at port 9999
+./build/aolang_server :9999
 ```
 
 
